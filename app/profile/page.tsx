@@ -18,18 +18,40 @@ type AddonResult = {
   action: string;
 };
 
+type PurchaseIntent = {
+  kind: "full" | "addon";
+  moduleSlug?: ModuleSlug;
+};
+
+const LS_LAST_BASE_ANSWERS = "viora_last_base_answers";
+const LS_LAST_BASE_REPORT_FREE = "viora_last_base_report_free";
+const LS_LAST_BASE_REPORT_FULL = "viora_last_base_report_full";
+const LS_LAST_RUN_AT = "viora_last_run_at";
 const LS_UNLOCKED_FULL = "viora_unlocked_full";
 const LS_UNLOCKED_ADDONS = "viora_unlocked_addons";
+const LS_EMAIL = "viora_email";
+const LS_NAME = "viora_name";
+const LS_CONSENT = "viora_consent";
+const LS_PENDING_PURCHASE = "viora_pending_purchase";
+const LS_PREMIUM_PRICE_WARNING = "viora_premium_price_warning";
 
 export default function ProfilePage() {
   const [step, setStep] = useState(0);
   const [phase, setPhase] = useState<Phase>("questions");
   const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>("idle");
   const [answers, setAnswers] = useState<Record<number, OptionLabel>>({});
+
   const [unlocked, setUnlocked] = useState(false);
   const [unlockedAddons, setUnlockedAddons] = useState<ModuleSlug[]>([]);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [isPaying, setIsPaying] = useState(false);
+
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [consent, setConsent] = useState(false);
+
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [purchaseIntent, setPurchaseIntent] = useState<PurchaseIntent | null>(null);
 
   const [selectedModule, setSelectedModule] = useState<ModuleSlug | null>(null);
   const [moduleStep, setModuleStep] = useState(0);
@@ -54,24 +76,66 @@ export default function ProfilePage() {
   const hasCompletedModule = (slug: ModuleSlug) => Boolean(completedAddons[slug]);
   const isAddonUnlocked = (slug: ModuleSlug) => unlockedAddons.includes(slug);
 
+  const addonPriceLabel = unlocked ? "0,99 €" : "2,99 €";
+  const greetingName = name.trim();
+
+  const persistBaseState = (nextAnswers: Record<number, OptionLabel>) => {
+    try {
+      localStorage.setItem(LS_LAST_BASE_ANSWERS, JSON.stringify(nextAnswers));
+      localStorage.setItem(LS_LAST_BASE_REPORT_FREE, JSON.stringify(generateFreeReport(scoreAnswers(nextAnswers))));
+      localStorage.setItem(LS_LAST_BASE_REPORT_FULL, JSON.stringify(generateFullReport(scoreAnswers(nextAnswers))));
+      localStorage.setItem(LS_LAST_RUN_AT, String(Date.now()));
+      if (email.trim()) localStorage.setItem(LS_EMAIL, email.trim());
+      if (name.trim()) localStorage.setItem(LS_NAME, name.trim());
+      localStorage.setItem(LS_CONSENT, consent ? "true" : "false");
+    } catch {}
+  };
+
   useEffect(() => {
     try {
       const full = localStorage.getItem(LS_UNLOCKED_FULL) === "true";
       setUnlocked(full);
 
-      const raw = localStorage.getItem(LS_UNLOCKED_ADDONS);
-      if (raw) {
-        const parsed = JSON.parse(raw);
+      const rawAddons = localStorage.getItem(LS_UNLOCKED_ADDONS);
+      if (rawAddons) {
+        const parsed = JSON.parse(rawAddons);
         if (Array.isArray(parsed)) {
           const filtered = parsed.filter((item): item is ModuleSlug => item in modulesBySlug);
           setUnlockedAddons(filtered);
         }
       }
+
+      const storedEmail = localStorage.getItem(LS_EMAIL);
+      const storedName = localStorage.getItem(LS_NAME);
+      const storedConsent = localStorage.getItem(LS_CONSENT) === "true";
+      if (storedEmail) setEmail(storedEmail);
+      if (storedName) setName(storedName);
+      setConsent(storedConsent);
+
+      const rawAnswers = localStorage.getItem(LS_LAST_BASE_ANSWERS);
+      if (rawAnswers) {
+        const parsed = JSON.parse(rawAnswers) as Record<string, OptionLabel>;
+        const normalized: Record<number, OptionLabel> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          const key = Number(k);
+          if (Number.isFinite(key) && (v === "A" || v === "B" || v === "C")) normalized[key] = v;
+        }
+
+        if (Object.keys(normalized).length >= questions.length) {
+          setAnswers(normalized);
+          setStep(questions.length - 1);
+          setPhase("result");
+        }
+      }
+
+      if (localStorage.getItem(LS_PREMIUM_PRICE_WARNING) === "true") {
+        setBillingMessage("0,99 € cena pre Plus modul nie je nakonfigurovaná, použila sa základná cena 2,99 €.");
+        localStorage.removeItem(LS_PREMIUM_PRICE_WARNING);
+      }
     } catch {}
 
     const params = new URLSearchParams(window.location.search);
-    const canceled = params.get("canceled");
-    if (canceled === "1") {
+    if (params.get("canceled") === "1") {
       setBillingMessage("Platba bola zrušená. Môžeš to skúsiť znova.");
     }
 
@@ -90,6 +154,10 @@ export default function ProfilePage() {
         if (data?.ok && data?.kind === "full") {
           setUnlocked(true);
           localStorage.setItem(LS_UNLOCKED_FULL, "true");
+          if (typeof data?.name === "string" && data.name.trim()) {
+            localStorage.setItem(LS_NAME, data.name.trim());
+            setName(data.name.trim());
+          }
           setBillingMessage("Platba prebehla úspešne. Hlbší profil je odomknutý.");
         } else if (data?.ok && data?.kind === "addon" && typeof data?.moduleSlug === "string" && data.moduleSlug in modulesBySlug) {
           const slug = data.moduleSlug as ModuleSlug;
@@ -103,9 +171,25 @@ export default function ProfilePage() {
         } else {
           setBillingMessage("Overenie platby sa nepodarilo. Skús obnoviť stránku.");
         }
+
+        const rawAnswers = localStorage.getItem(LS_LAST_BASE_ANSWERS);
+        if (rawAnswers) {
+          const parsed = JSON.parse(rawAnswers) as Record<string, OptionLabel>;
+          const normalized: Record<number, OptionLabel> = {};
+          for (const [k, v] of Object.entries(parsed)) {
+            const key = Number(k);
+            if (Number.isFinite(key) && (v === "A" || v === "B" || v === "C")) normalized[key] = v;
+          }
+          if (Object.keys(normalized).length >= questions.length) {
+            setAnswers(normalized);
+            setStep(questions.length - 1);
+            setPhase("result");
+          }
+        }
       } catch {
         setBillingMessage("Overenie platby zlyhalo. Skús to prosím znova.");
       } finally {
+        localStorage.removeItem(LS_PENDING_PURCHASE);
         const clean = new URL(window.location.href);
         clean.searchParams.delete("session_id");
         window.history.replaceState({}, "", clean.toString());
@@ -115,21 +199,66 @@ export default function ProfilePage() {
     void verify();
   }, []);
 
-  const startCheckout = async (kind: "full" | "addon", moduleSlug?: ModuleSlug) => {
+  useEffect(() => {
+    if (phase === "result") persistBaseState(answers);
+  }, [phase, answers]);
+
+  const openPaymentModal = (intent: PurchaseIntent) => {
+    setPurchaseIntent(intent);
+    setShowPaymentModal(true);
+  };
+
+  const startCheckout = async () => {
+    if (!purchaseIntent) return;
+    if (!email.trim()) {
+      setBillingMessage("Pred platbou doplň prosím e-mail.");
+      return;
+    }
+    if (!consent) {
+      setBillingMessage("Pred platbou je potrebné potvrdiť súhlas s podmienkami.");
+      return;
+    }
+
     try {
       setIsPaying(true);
       setBillingMessage(null);
 
+      persistBaseState(answers);
+      localStorage.setItem(LS_EMAIL, email.trim());
+      if (name.trim()) localStorage.setItem(LS_NAME, name.trim());
+      localStorage.setItem(LS_CONSENT, "true");
+      localStorage.setItem(
+        LS_PENDING_PURCHASE,
+        JSON.stringify({
+          ...purchaseIntent,
+          email: email.trim(),
+          name: name.trim(),
+          timestamp: Date.now(),
+        }),
+      );
+
+      const isPremium = purchaseIntent.kind === "addon" ? unlocked : false;
+
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind, moduleSlug }),
+        body: JSON.stringify({
+          kind: purchaseIntent.kind,
+          moduleSlug: purchaseIntent.moduleSlug,
+          email: email.trim(),
+          name: name.trim(),
+          isPremium,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok || !data?.url) {
         setBillingMessage(data?.error || "Nepodarilo sa spustiť platbu.");
         return;
+      }
+
+      if (data?.usedPremiumFallback === true) {
+        localStorage.setItem(LS_PREMIUM_PRICE_WARNING, "true");
       }
 
       window.location.href = data.url as string;
@@ -161,14 +290,15 @@ export default function ProfilePage() {
   const startModule = (slug: ModuleSlug) => {
     const module = modulesBySlug[slug];
 
-    if (!module.isFree && !unlocked) {
+    if (!module.isFree && !unlocked && !isAddonUnlocked(slug)) {
       setModuleNotice("Tento modul je dostupný po odomknutí detailnej analýzy.");
+      setPendingModulePurchase(slug);
       unlockRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       unlockRef.current?.focus();
       return;
     }
 
-    if (!module.isFree && unlocked && !isAddonUnlocked(slug)) {
+    if (!module.isFree && !isAddonUnlocked(slug)) {
       setPendingModulePurchase(slug);
       setModuleNotice("Tento modul je Plus. Odomkni ho a pokračuj v otázkach.");
       return;
@@ -229,6 +359,7 @@ export default function ProfilePage() {
       <main className="mx-auto w-full max-w-4xl px-6 py-14 md:py-20">
         <div className="mb-10 space-y-3">
           <p className="text-sm uppercase tracking-[0.16em] text-slate-500">Viora Decision Profile</p>
+          {greetingName && <p className="text-sm text-slate-600">Ahoj, {greetingName}</p>}
           <h1 className="text-3xl font-semibold md:text-4xl">Tvoj bezplatný report</h1>
         </div>
 
@@ -302,13 +433,13 @@ export default function ProfilePage() {
               <button
                 ref={unlockRef}
                 type="button"
-                onClick={() => (!unlocked ? void startCheckout("full") : undefined)}
+                onClick={() => (!unlocked ? openPaymentModal({ kind: "full" }) : undefined)}
                 disabled={unlocked || isPaying}
                 className={`inline-flex items-center rounded-full px-6 py-3 text-sm font-medium transition ${
                   unlocked ? "cursor-default bg-emerald-100 text-emerald-700" : "bg-slate-900 text-white hover:bg-slate-800"
                 } disabled:opacity-80`}
               >
-                {unlocked ? "Hlbší profil odomknutý" : isPaying ? "Presmerovanie na platbu…" : "Chcem hlbší profil"}
+                {unlocked ? "Hlbší profil odomknutý" : "Chcem hlbší profil"}
               </button>
             </div>
           </article>
@@ -341,15 +472,15 @@ export default function ProfilePage() {
 
             {moduleNotice && <p className="mt-4 text-sm text-amber-700">{moduleNotice}</p>}
 
-            {pendingModulePurchase && unlocked && !isAddonUnlocked(pendingModulePurchase) && (
+            {pendingModulePurchase && !isAddonUnlocked(pendingModulePurchase) && (
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => void startCheckout("addon", pendingModulePurchase)}
+                  onClick={() => openPaymentModal({ kind: "addon", moduleSlug: pendingModulePurchase })}
                   disabled={isPaying}
                   className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-70"
                 >
-                  {isPaying ? "Presmerovanie…" : "Odomknúť tento modul (2.99€)"}
+                  Odomknúť tento modul ({addonPriceLabel})
                 </button>
                 <span className="text-sm text-slate-500">{modulesBySlug[pendingModulePurchase].title}</span>
               </div>
@@ -421,6 +552,74 @@ export default function ProfilePage() {
             Späť na úvod
           </Link>
         </div>
+
+        {showPaymentModal && purchaseIntent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-6">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl md:p-8">
+              <h3 className="text-xl font-semibold">Pokračovanie na platbu</h3>
+              <p className="mt-2 text-sm text-slate-600">Čo získaš:</p>
+              <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-slate-700">
+                <li>detailnejší rozklad tvojho rozhodovacieho štýlu,</li>
+                <li>jasné rizikové body pre každodenné rozhodnutia,</li>
+                <li>konkrétne kroky na zlepšenie rozhodovania,</li>
+                <li>prístup k odomknutým Plus modulom podľa výberu.</li>
+              </ul>
+
+              <div className="mt-5 space-y-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    placeholder="tvoj@email.sk"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Meno (voliteľné)</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    placeholder="Ako ťa môžeme osloviť"
+                  />
+                </div>
+                <label className="flex items-start gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <span>Súhlasím s podmienkami a ochranou súkromia.</span>
+                </label>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentModal(false)}
+                  className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                >
+                  Zavrieť
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void startCheckout()}
+                  disabled={isPaying}
+                  className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-70"
+                >
+                  {purchaseIntent.kind === "full"
+                    ? "Pokračovať na platbu 4,99 €"
+                    : `Pokračovať na platbu ${addonPriceLabel}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     );
   }

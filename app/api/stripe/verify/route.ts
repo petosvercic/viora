@@ -23,12 +23,13 @@ export async function POST(req: Request) {
 
     const kind = session.metadata?.kind === "addon" ? "addon" : session.metadata?.kind === "full" ? "full" : null;
     const moduleSlug = typeof session.metadata?.moduleSlug === "string" ? session.metadata.moduleSlug : undefined;
+    const name = typeof session.metadata?.name === "string" ? session.metadata.name : undefined;
 
     if (!kind) {
       return NextResponse.json({ ok: false });
     }
 
-    return NextResponse.json({ ok: true, kind, moduleSlug });
+    return NextResponse.json({ ok: true, kind, moduleSlug, name });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || "Stripe verify failed" }, { status: 500 });
   }
