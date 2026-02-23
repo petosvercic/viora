@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { generateFreeReport } from "../lib/reportGen";
+import { generateFreeReport, generateFullReport } from "../lib/reportGen";
 import { questions, scoreAnswers, type OptionLabel } from "../lib/decisionModel";
 
 type Phase = "questions" | "analyzing" | "result";
@@ -11,12 +11,14 @@ export default function ProfilePage() {
   const [step, setStep] = useState(0);
   const [phase, setPhase] = useState<Phase>("questions");
   const [answers, setAnswers] = useState<Record<number, OptionLabel>>({});
+  const [unlocked, setUnlocked] = useState(false);
 
   const currentQuestion = questions[step];
   const progress = ((step + 1) / questions.length) * 100;
 
   const scored = useMemo(() => scoreAnswers(answers), [answers]);
   const report = useMemo(() => generateFreeReport(scored), [scored]);
+  const fullReport = useMemo(() => generateFullReport(scored), [scored]);
 
   const onSelect = (questionId: number, label: OptionLabel) => {
     const next = { ...answers, [questionId]: label };
@@ -65,6 +67,80 @@ export default function ProfilePage() {
           <article className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8">
             <h2 className="text-xl font-semibold">Jeden optimalizačný zásah</h2>
             <div className="mt-4 whitespace-pre-line text-slate-700">{report.intervention}</div>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8">
+            <h2 className="text-xl font-semibold">Detailná analýza (Full Report)</h2>
+            <div className="relative mt-5 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-5 md:p-6">
+              <div className={unlocked ? "" : "pointer-events-none select-none blur-[3px]"}>
+                <div className="space-y-7">
+                  <section>
+                    <h3 className="text-base font-semibold">Rozšírený rozhodovací podpis</h3>
+                    <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-700 md:text-base">
+                      {fullReport.extendedSignature}
+                    </p>
+                  </section>
+
+                  <section>
+                    <h3 className="text-base font-semibold">Analytická mapa</h3>
+                    <ul className="mt-3 space-y-2 text-sm text-slate-700 md:text-base">
+                      <li>
+                        <span className="font-medium">Rýchlosť:</span> {fullReport.dimensionMap.speed}
+                      </li>
+                      <li>
+                        <span className="font-medium">Spracovanie:</span> {fullReport.dimensionMap.processing}
+                      </li>
+                      <li>
+                        <span className="font-medium">Neistota:</span> {fullReport.dimensionMap.risk}
+                      </li>
+                      <li>
+                        <span className="font-medium">Tlak:</span> {fullReport.dimensionMap.pressure}
+                      </li>
+                      <li>
+                        <span className="font-medium">Kontrola:</span> {fullReport.dimensionMap.control}
+                      </li>
+                    </ul>
+                  </section>
+
+                  <section>
+                    <h3 className="text-base font-semibold">Interakčné napätia</h3>
+                    <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-700 md:text-base">
+                      {fullReport.tensions.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section>
+                    <h3 className="text-base font-semibold">7-dňový plán optimalizácie</h3>
+                    <ol className="mt-3 space-y-2 text-sm text-slate-700 md:text-base">
+                      {fullReport.sevenDayPlan.map((item) => (
+                        <li key={item.day}>
+                          <span className="font-medium">Deň {item.day}:</span> {item.text}
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                </div>
+              </div>
+
+              {!unlocked && (
+                <>
+                  <div className="pointer-events-none absolute inset-0 bg-white/30" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-white via-white/90 to-transparent" />
+                </>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setUnlocked((prev) => !prev)}
+                className="inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+              >
+                Odomknúť detailnú analýzu
+              </button>
+            </div>
           </article>
         </section>
 
