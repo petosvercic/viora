@@ -23,7 +23,7 @@ const audience = [
 
 export default function Home() {
   return (
-    <main className="bg-white text-slate-900">
+    <main className="text-slate-900">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6 md:px-8">
         <Link href="/" className="inline-flex items-center" aria-label="Viora domov">
           <Image src="/brand/logo.png" alt="Viora" width={120} height={36} priority className="h-9 w-auto" />
@@ -31,16 +31,8 @@ export default function Home() {
       </header>
 
       <section className="mx-auto w-full max-w-6xl px-6 pb-20 md:px-8 md:pb-28">
-        <div className="relative overflow-hidden rounded-3xl">
-          <Image
-            src="/brand/bg.png"
-            alt=""
-            fill
-            priority
-            className="object-cover"
-            sizes="(max-width: 768px) 100vw, 1200px"
-          />
-          <div className="absolute inset-0 bg-slate-950/45" />
+        <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-white/10 shadow-sm backdrop-blur-[1px]">
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-950/70 via-slate-900/55 to-slate-800/40" />
 
           <div className="relative z-10 mx-auto flex min-h-[470px] max-w-3xl flex-col items-start justify-center gap-6 px-8 py-16 text-white md:px-12">
             <p className="text-sm uppercase tracking-[0.18em] text-white/80">Viora Decision Profile</p>
@@ -64,7 +56,7 @@ export default function Home() {
           <h2 className="text-2xl font-semibold md:text-3xl">Čo profil meria</h2>
           <ul className="grid gap-3 text-slate-700 md:grid-cols-2">
             {profileMetrics.map((item) => (
-              <li key={item} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <li key={item} className="rounded-xl border border-slate-200 bg-slate-50/85 px-4 py-3 backdrop-blur-sm">
                 {item}
               </li>
             ))}
@@ -94,7 +86,7 @@ export default function Home() {
           </ul>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-6 backdrop-blur-sm">
           <h2 className="text-xl font-semibold">Pre organizácie</h2>
           <p className="mt-2 text-slate-700">Coming soon</p>
         </div>

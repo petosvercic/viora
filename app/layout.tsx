@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-b from-white/92 via-white/90 to-slate-100/94"
+          className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-b from-slate-950/18 via-white/88 to-slate-100/94"
         />
         <div className="relative z-10">{children}</div>
       </body>
