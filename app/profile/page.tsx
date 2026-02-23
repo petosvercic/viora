@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { scoreAnswers, type OptionLabel, questions } from "../lib/decisionModel";
 import { generateModuleAddon } from "../lib/moduleAddonGen";
 import { scoreModuleAnswers } from "../lib/moduleScoring";
@@ -18,12 +18,18 @@ type AddonResult = {
   action: string;
 };
 
+const LS_UNLOCKED_FULL = "viora_unlocked_full";
+const LS_UNLOCKED_ADDONS = "viora_unlocked_addons";
+
 export default function ProfilePage() {
   const [step, setStep] = useState(0);
   const [phase, setPhase] = useState<Phase>("questions");
   const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>("idle");
   const [answers, setAnswers] = useState<Record<number, OptionLabel>>({});
   const [unlocked, setUnlocked] = useState(false);
+  const [unlockedAddons, setUnlockedAddons] = useState<ModuleSlug[]>([]);
+  const [billingMessage, setBillingMessage] = useState<string | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
 
   const [selectedModule, setSelectedModule] = useState<ModuleSlug | null>(null);
   const [moduleStep, setModuleStep] = useState(0);
@@ -31,6 +37,7 @@ export default function ProfilePage() {
   const [moduleNotice, setModuleNotice] = useState<string | null>(null);
   const [moduleTransition, setModuleTransition] = useState<TransitionPhase>("idle");
   const [completedAddons, setCompletedAddons] = useState<Partial<Record<ModuleSlug, AddonResult>>>({});
+  const [pendingModulePurchase, setPendingModulePurchase] = useState<ModuleSlug | null>(null);
 
   const unlockRef = useRef<HTMLButtonElement | null>(null);
 
@@ -45,6 +52,93 @@ export default function ProfilePage() {
   const activeModuleQuestion = moduleConfig ? moduleConfig.questions[moduleStep] : null;
 
   const hasCompletedModule = (slug: ModuleSlug) => Boolean(completedAddons[slug]);
+  const isAddonUnlocked = (slug: ModuleSlug) => unlockedAddons.includes(slug);
+
+  useEffect(() => {
+    try {
+      const full = localStorage.getItem(LS_UNLOCKED_FULL) === "true";
+      setUnlocked(full);
+
+      const raw = localStorage.getItem(LS_UNLOCKED_ADDONS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((item): item is ModuleSlug => item in modulesBySlug);
+          setUnlockedAddons(filtered);
+        }
+      }
+    } catch {}
+
+    const params = new URLSearchParams(window.location.search);
+    const canceled = params.get("canceled");
+    if (canceled === "1") {
+      setBillingMessage("Platba bola zrušená. Môžeš to skúsiť znova.");
+    }
+
+    const sessionId = params.get("session_id");
+    if (!sessionId) return;
+
+    const verify = async () => {
+      try {
+        const res = await fetch("/api/stripe/verify", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        });
+        const data = await res.json();
+
+        if (data?.ok && data?.kind === "full") {
+          setUnlocked(true);
+          localStorage.setItem(LS_UNLOCKED_FULL, "true");
+          setBillingMessage("Platba prebehla úspešne. Hlbší profil je odomknutý.");
+        } else if (data?.ok && data?.kind === "addon" && typeof data?.moduleSlug === "string" && data.moduleSlug in modulesBySlug) {
+          const slug = data.moduleSlug as ModuleSlug;
+          setUnlockedAddons((prev) => {
+            const next = prev.includes(slug) ? prev : [...prev, slug];
+            localStorage.setItem(LS_UNLOCKED_ADDONS, JSON.stringify(next));
+            return next;
+          });
+          setBillingMessage(`Platba prebehla úspešne. Modul „${modulesBySlug[slug].title}“ je odomknutý.`);
+          setPendingModulePurchase(null);
+        } else {
+          setBillingMessage("Overenie platby sa nepodarilo. Skús obnoviť stránku.");
+        }
+      } catch {
+        setBillingMessage("Overenie platby zlyhalo. Skús to prosím znova.");
+      } finally {
+        const clean = new URL(window.location.href);
+        clean.searchParams.delete("session_id");
+        window.history.replaceState({}, "", clean.toString());
+      }
+    };
+
+    void verify();
+  }, []);
+
+  const startCheckout = async (kind: "full" | "addon", moduleSlug?: ModuleSlug) => {
+    try {
+      setIsPaying(true);
+      setBillingMessage(null);
+
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind, moduleSlug }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.url) {
+        setBillingMessage(data?.error || "Nepodarilo sa spustiť platbu.");
+        return;
+      }
+
+      window.location.href = data.url as string;
+    } catch {
+      setBillingMessage("Nepodarilo sa spustiť platbu. Skús to prosím znova.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
   const onSelect = (questionId: number, label: OptionLabel) => {
     const next = { ...answers, [questionId]: label };
@@ -74,6 +168,13 @@ export default function ProfilePage() {
       return;
     }
 
+    if (!module.isFree && unlocked && !isAddonUnlocked(slug)) {
+      setPendingModulePurchase(slug);
+      setModuleNotice("Tento modul je Plus. Odomkni ho a pokračuj v otázkach.");
+      return;
+    }
+
+    setPendingModulePurchase(null);
     setModuleNotice(null);
     setSelectedModule(slug);
     setModuleAnswers({});
@@ -108,6 +209,7 @@ export default function ProfilePage() {
     setModuleStep(0);
     setModuleNotice(null);
     setModuleTransition("idle");
+    setPendingModulePurchase(null);
   };
 
   if (phase === "analyzing") {
@@ -129,6 +231,12 @@ export default function ProfilePage() {
           <p className="text-sm uppercase tracking-[0.16em] text-slate-500">Viora Decision Profile</p>
           <h1 className="text-3xl font-semibold md:text-4xl">Tvoj bezplatný report</h1>
         </div>
+
+        {billingMessage && (
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm backdrop-blur-sm">
+            {billingMessage}
+          </div>
+        )}
 
         <section className="space-y-8">
           <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:p-8">
@@ -194,13 +302,13 @@ export default function ProfilePage() {
               <button
                 ref={unlockRef}
                 type="button"
-                onClick={() => setUnlocked((prev) => !prev)}
-                disabled={unlocked}
+                onClick={() => (!unlocked ? void startCheckout("full") : undefined)}
+                disabled={unlocked || isPaying}
                 className={`inline-flex items-center rounded-full px-6 py-3 text-sm font-medium transition ${
                   unlocked ? "cursor-default bg-emerald-100 text-emerald-700" : "bg-slate-900 text-white hover:bg-slate-800"
-                }`}
+                } disabled:opacity-80`}
               >
-                {unlocked ? "Hlbší profil odomknutý" : "Chcem hlbší profil"}
+                {unlocked ? "Hlbší profil odomknutý" : isPaying ? "Presmerovanie na platbu…" : "Chcem hlbší profil"}
               </button>
             </div>
           </article>
@@ -232,6 +340,20 @@ export default function ProfilePage() {
             </div>
 
             {moduleNotice && <p className="mt-4 text-sm text-amber-700">{moduleNotice}</p>}
+
+            {pendingModulePurchase && unlocked && !isAddonUnlocked(pendingModulePurchase) && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void startCheckout("addon", pendingModulePurchase)}
+                  disabled={isPaying}
+                  className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-70"
+                >
+                  {isPaying ? "Presmerovanie…" : "Odomknúť tento modul (2.99€)"}
+                </button>
+                <span className="text-sm text-slate-500">{modulesBySlug[pendingModulePurchase].title}</span>
+              </div>
+            )}
 
             {selectedModule && moduleConfig && !completedAddons[selectedModule] && activeModuleQuestion && (
               <div className={`mt-8 rounded-xl border border-slate-200 p-5 transition-all duration-300 ${moduleTransition === "transitioning" ? "opacity-70" : "opacity-100"}`}>

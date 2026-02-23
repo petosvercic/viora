@@ -1,45 +1,48 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "../../../lib/stripe";
 
+type CheckoutBody = {
+  kind?: "full" | "addon";
+  moduleSlug?: string;
+};
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const resultId = String(body?.resultId || "");
+    const body = (await req.json()) as CheckoutBody;
+    const kind = body?.kind;
+    const moduleSlug = body?.moduleSlug;
 
-    if (!resultId) {
-      return NextResponse.json({ error: "Missing resultId" }, { status: 400 });
+    if (kind !== "full" && kind !== "addon") {
+      return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
+    }
+
+    if (kind === "addon" && !moduleSlug) {
+      return NextResponse.json({ error: "Missing moduleSlug" }, { status: 400 });
     }
 
     const stripe = getStripe();
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    const priceFull = process.env.STRIPE_PRICE_FULL || "price_1T45iMP8pde7A7bVFbmhYpRa";
+    const priceAddon = process.env.STRIPE_PRICE_ADDON || "price_1T45k9P8pde7A7bViFY3i64o";
+    const price = kind === "full" ? priceFull : priceAddon;
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL || req.headers.get("origin") || "http://localhost:3000";
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "eur",
-            product_data: {
-              name: "Odomknutie výsledku",
-              description: `Výsledok ID: ${resultId}`,
-            },
-            unit_amount: 100, // 1.00 €
-          },
-          quantity: 1,
-        },
-      ],
-      success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}&rid=${encodeURIComponent(resultId)}`,
-      cancel_url: `${origin}/?rid=${encodeURIComponent(resultId)}`,
-      metadata: { resultId },
+      line_items: [{ price, quantity: 1 }],
+      success_url: `${baseUrl}/profile?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/profile?canceled=1`,
+      metadata: {
+        kind,
+        moduleSlug: moduleSlug || "",
+      },
     });
 
     return NextResponse.json({ url: session.url });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Stripe checkout failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Stripe checkout failed" }, { status: 500 });
   }
 }
