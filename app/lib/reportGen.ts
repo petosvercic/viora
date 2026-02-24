@@ -112,7 +112,7 @@ export function generateFreeReport(profile: ProfileInput, variant?: { seed?: str
 }
 
 export function generateFullReport(profile: ProfileInput, variant?: { seed?: string; runIndex?: number }): FullReport {
-  const { raw, level } = profile;
+  const { level } = profile;
   const seed = variant?.seed ?? "viora";
   const runIndex = variant?.runIndex ?? 0;
 
