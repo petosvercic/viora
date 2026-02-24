@@ -9,8 +9,8 @@ type ModuleScores = {
 };
 
 export function generateModuleAddon(slug: ModuleSlug, baseProfile: BaseProfile, moduleScores: ModuleScores) {
-  const module = modulesBySlug[slug];
-  const [a, b] = module.subscores;
+  const selectedModule = modulesBySlug[slug];
+  const [a, b] = selectedModule.subscores;
   const aLevel = moduleScores.level[a];
   const bLevel = moduleScores.level[b];
 

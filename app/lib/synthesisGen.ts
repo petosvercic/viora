@@ -16,10 +16,11 @@ export const generateSynthesisReport = (input: {
   included: ModuleSlug[];
   purchased: ModuleSlug[];
   tuningChoices: string[];
+  miniContextInsights?: string[];
   seed: string;
   attempt: number;
 }): SynthesisReport => {
-  const { profile, fullReport, included, purchased, tuningChoices, seed, attempt } = input;
+  const { profile, fullReport, included, purchased, tuningChoices, miniContextInsights = [], seed, attempt } = input;
   const styleKey = `${seed}:${attempt}:synthesis`;
 
   const first = pickDeterministic([
@@ -54,9 +55,13 @@ export const generateSynthesisReport = (input: {
 
   const contextSlugs = Array.from(new Set([...included, ...purchased]));
   const contextTitles = contextSlugs.map((slug) => modulesBySlug[slug]?.title).filter(Boolean);
+  const miniInsightsText = miniContextInsights.length
+    ? ` Mini odpovede naznačujú: ${miniContextInsights.join(" ")}`
+    : "";
+
   const contexts = contextTitles.length
-    ? `Tvoje kontexty (${contextTitles.join(", ")}) dopĺňajú obraz: tieto oblasti sú najlepší priestor na okamžitý tréning nového štýlu.`
-    : "Kontextové oblasti si zatiaľ nevybral/a. Keď pridáš 1-2 moduly, Komplexná analýza sa vie ešte presnejšie prispôsobiť tvojmu dňu.";
+    ? `Tvoje kontexty (${contextTitles.join(", ")}) dopĺňajú obraz: tieto oblasti sú najlepší priestor na okamžitý tréning nového štýlu.${miniInsightsText}`
+    : `Kontextové oblasti si zatiaľ nevybral/a. Keď pridáš 1-2 moduly, Komplexná analýza sa vie ešte presnejšie prispôsobiť tvojmu dňu.${miniInsightsText}`;
 
   return {
     summary: [first, second, third],
