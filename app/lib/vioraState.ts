@@ -18,7 +18,7 @@ export type VioraStateV1 = {
   };
   unlocks: { full?: boolean; addons?: ModuleSlug[]; included?: ModuleSlug[]; miniReports?: Partial<Record<ModuleSlug, string>> };
   tuning: { done?: boolean; choices?: string[] };
-  ui: { lastMode?: ProfileMode; lastSelectedModule?: ModuleSlug; premiumStep?: 1 | 2 | 3 | 4 };
+  ui: { lastMode?: ProfileMode; lastSelectedModule?: ModuleSlug; premiumStep?: 1 | 2 | 3 | 4 | 5 };
 };
 
 const LS_STATE = "viora_state_v1";
@@ -131,7 +131,7 @@ export const sanitizeVioraState = (rawValue: Partial<VioraStateV1> | null | unde
     ui: {
       lastMode: raw.ui?.lastMode,
       lastSelectedModule: isModuleSlug(raw.ui?.lastSelectedModule) ? raw.ui.lastSelectedModule : undefined,
-      premiumStep: raw.ui?.premiumStep === 1 || raw.ui?.premiumStep === 2 || raw.ui?.premiumStep === 3 || raw.ui?.premiumStep === 4 ? raw.ui.premiumStep : 1,
+      premiumStep: raw.ui?.premiumStep === 1 || raw.ui?.premiumStep === 2 || raw.ui?.premiumStep === 3 || raw.ui?.premiumStep === 4 || raw.ui?.premiumStep === 5 ? raw.ui.premiumStep : 1,
     },
   };
 };

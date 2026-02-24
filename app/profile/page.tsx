@@ -126,10 +126,10 @@ const changePlanByFocus: Record<(typeof tuningOptions)[number], ChangePlan> = {
 };
 
 const plannedUpgradeItems = [
-  "Adaptívne mini-reporty podľa reálneho kontextu dňa.",
-  "Pokročilé porovnanie dvoch rozhodovacích štýlov vedľa seba.",
-  "Dlhší 30-dňový plán návykov s checkpointmi.",
-  "Export výstupu do tímového one-pageru.",
+  "Viora Personaliss – AI “decision coach” režim (plánované).",
+  "Viora Strategy – týždenné plány + checkpointy (plánované).",
+  "Viora Timeline – história rozhodnutí a tracking zmeny (plánované).",
+  "Viora Pulse – notifikácie a mikro-návyky (plánované).",
 ];
 
 const buildMiniReportTextFromBase = (slug: ModuleSlug, baseAnswers: Record<number, OptionLabel> | undefined) => {
@@ -211,6 +211,13 @@ export default function ProfilePage() {
   const [premiumMiniTransition, setPremiumMiniTransition] = useState<TransitionPhase>("idle");
   const [miniFlowDone, setMiniFlowDone] = useState(false);
   const [miniFlowNotice, setMiniFlowNotice] = useState<string | null>(null);
+  const [microToast, setMicroToast] = useState<string | null>(null);
+
+  const [activeMiniReportModule, setActiveMiniReportModule] = useState<ModuleSlug | null>(null);
+  const [miniReportAnswersByModule, setMiniReportAnswersByModule] = useState<Partial<Record<ModuleSlug, Record<number, ModuleOptionLabel>>>>({});
+  const [miniReportQuestionByModule, setMiniReportQuestionByModule] = useState<Partial<Record<ModuleSlug, number>>>({});
+  const [miniReportStatusByModule, setMiniReportStatusByModule] = useState<Partial<Record<ModuleSlug, "locked" | "collecting" | "ready">>>({});
+  const [miniReportResultByModule, setMiniReportResultByModule] = useState<Partial<Record<ModuleSlug, { insight: string; nextStep: string; metric: string; trigger: string }>>>({});
 
   const unlockRef = useRef<HTMLButtonElement | null>(null);
   const changePlanRef = useRef<HTMLElement | null>(null);
@@ -229,11 +236,12 @@ export default function ProfilePage() {
   const attempt = state?.base.attempt ?? 0;
   const mode: ProfileMode = state ? deriveProfileMode(state) : "quiz";
   const premiumStep = state?.ui.premiumStep ?? 1;
-  const premiumStepLabels: Record<1 | 2 | 3 | 4, string> = {
-    1: "Premium Zone",
-    2: "Upgrade výber",
-    3: "Mini doplnenie",
-    4: "Hlboký výsledok",
+  const premiumStepLabels: Record<1 | 2 | 3 | 4 | 5, string> = {
+    1: "Premium zone",
+    2: "Upgreade",
+    3: "Sub...",
+    4: "Analisis",
+    5: "Tuning",
   };
 
   const includedPremiumModules = useMemo(() => (state?.unlocks.included ?? []).filter((slug) => modulesBySlug[slug]), [state?.unlocks.included]);
@@ -327,10 +335,48 @@ ${url}`;
       } else {
         await copyText(payload);
       }
-      setShareMessage("Zdieľací text pripravený ✅");
+      setShareMessage("Skopírované. Môžeš to hodiť do chatu.");
     } catch {
       setShareMessage("Zdieľanie bolo zrušené alebo zlyhalo.");
     }
+  };
+
+  const showToast = (text: string) => {
+    setMicroToast(text);
+    window.setTimeout(() => setMicroToast(null), 2200);
+  };
+
+  const getMiniReportTemplate = (slug: ModuleSlug) => {
+    if (slug === "vztahy-komunikacia") {
+      return {
+        insight: "Tvoj štýl pod tlakom je „skrátiť komunikáciu“, čo druhá strana často číta ako chlad.",
+        nextStep: "7 dní: pred dôležitou odpoveďou použi 20-sek “jasno + citlivo”: 1 fakt + 1 pocit + 1 ďalší krok.",
+        metric: "Koľkokrát denne si použil “fakt + pocit + krok” (cieľ: 1–2x).",
+        trigger: "Keď cítiš napätie v hrudi alebo potrebu “to ukončiť”.",
+      };
+    }
+    if (slug === "disciplina-rutiny") {
+      return {
+        insight: "Najviac ťa neláme motivácia, ale preťažený štart a potom nulový dopad.",
+        nextStep: "7 dní: nastav “minimum deň”: 12 min práce na 1 úlohe + stop.",
+        metric: "Počet dní s “minimum deň” (cieľ: 5/7).",
+        trigger: "Keď sa ti nechce začať alebo “už je neskoro”.",
+      };
+    }
+    if (slug === "peniaze-riziko") {
+      return {
+        insight: "V rozhodovaní o peniazoch ti robí problém hranica: kedy je to ešte disciplína a kedy už strach.",
+        nextStep: "7 dní: pred väčším rozhodnutím urob 60-sek “limit”: max strata, max zisk, a jedno “ak-tak”.",
+        metric: "Počet rozhodnutí s napísaným “max strata” (cieľ: 3× týždenne).",
+        trigger: "Keď sa objaví nutkanie kliknúť / kúpiť / investovať impulzívne.",
+      };
+    }
+    return {
+      insight: "Tvoj problém nie je plán, ale prechod z plánovania do dokončenia.",
+      nextStep: "7 dní: každý deň si vyber 1 “dokončiť-dnes” úlohu a rozbi ju na 2 mikro-kroky (15–25 min).",
+      metric: "Počet dní s dokončenou 1 úlohou (cieľ: 4/7).",
+      trigger: "Keď začneš skákať medzi úlohami alebo otvárať nové tabu.",
+    };
   };
 
   useEffect(() => {
@@ -386,11 +432,18 @@ ${url}`;
           }
           if (data?.ok && data?.kind === "mini_report" && typeof data?.moduleSlug === "string" && data.moduleSlug in modulesBySlug) {
             const slug = data.moduleSlug as ModuleSlug;
-            const reportText = buildMiniReportTextFromBase(slug, prev.base.answers);
             const next = patchVioraState(prev, {
-              unlocks: { ...prev.unlocks, miniReports: { ...(prev.unlocks.miniReports ?? {}), [slug]: reportText } },
+              unlocks: { ...prev.unlocks, miniReports: { ...(prev.unlocks.miniReports ?? {}), [slug]: "__UNLOCKED__" } },
             });
             saveVioraState(next);
+            setActiveMiniReportModule(slug);
+            setMiniReportStatusByModule((prevStatus) => ({ ...prevStatus, [slug]: "collecting" }));
+            setMiniReportQuestionByModule((prevIndex) => ({ ...prevIndex, [slug]: 0 }));
+            showToast("Mini report odomknutý ✅ Doplň 30–60 sek.");
+            window.setTimeout(() => {
+              showToast("Otvoril som mini otázky pre presnejší výsledok.");
+              document.getElementById(`mini-card-${slug}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 320);
             return next;
           }
           return prev;
@@ -398,7 +451,7 @@ ${url}`;
 
         if (data?.ok && data?.kind === "full") setBillingMessage("Platba prebehla úspešne. Hlbší profil je odomknutý.");
         else if (data?.ok && data?.kind === "addon") setBillingMessage("Platba prebehla úspešne. Modul je odomknutý.");
-        else if (data?.ok && data?.kind === "mini_report") setBillingMessage("Platba prebehla úspešne. Mini report je pripravený.");
+        else if (data?.ok && data?.kind === "mini_report") setBillingMessage("Platba prebehla úspešne. Mini report je odomknutý.");
         else setBillingMessage("Overenie platby sa nepodarilo. Skús obnoviť stránku.");
       } catch {
         setBillingMessage("Overenie platby zlyhalo. Skús to prosím znova.");
@@ -420,9 +473,9 @@ ${url}`;
     if (state.ui.premiumStep === 4) setMiniFlowDone(true);
   }, [state, mode]);
 
-  const goToPremiumStep = (targetStep: 1 | 2 | 3 | 4) => {
+  const goToPremiumStep = (targetStep: 1 | 2 | 3 | 4 | 5) => {
     if (!state) return;
-    if (targetStep === 4 && !miniFlowDone) {
+    if ((targetStep === 4 || targetStep === 5) && !miniFlowDone) {
       setMiniFlowNotice("Najprv dokonči mini otázky v kroku 3 alebo ich preskoč.");
       return;
     }
@@ -721,6 +774,7 @@ ${url}`;
 
         {shareMessage && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{shareMessage}</div>}
         {billingMessage && <div className="mb-4 rounded-xl border border-slate-200 bg-white/90 px-4 py-2 text-sm text-slate-700">{billingMessage}</div>}
+        {microToast && <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-700">{microToast}</div>}
 
         {mode === "free_results" && (
           <section className="space-y-6">
@@ -753,18 +807,20 @@ ${url}`;
           <section className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-2">
-                {[1, 2, 3, 4].map((s) => {
+                {[1, 2, 3, 4, 5].map((s) => {
                   const tip = s === 1
                     ? "Tvoj premium priestor: výsledky, doplnky a plán zmeny."
                     : s === 2
                       ? "Vyber 2 oblasti v cene, ktoré zapracujeme do hlbokej analýzy."
                       : s === 3
                         ? "Krátke otázky, aby analýza sedela na tvoj kontext."
-                        : "Komplexná analýza + mini-reporty + tuning a checklist zmeny.";
+                        : s === 4
+                        ? "Komplexná analýza + mini-reporty ako samostatný výsledok."
+                        : "Checklist zmien pre vybrané focusy na 7 dní.";
                   return (
                     <div key={s} className="inline-flex items-center">
-                      <button type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
-                        {premiumStepLabels[s as 1 | 2 | 3 | 4]}
+                      <button type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4 | 5)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
+                        {premiumStepLabels[s as 1 | 2 | 3 | 4 | 5]}
                       </button>
                       <Tooltip text={tip} />
                     </div>
@@ -823,6 +879,7 @@ ${url}`;
               <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="text-xl font-semibold">Mini doplňujúce otázky</h2>
                 <p className="mt-2 text-slate-600">Zaberie to 30–90 sekúnd. Pomôže to spraviť výstup presnejší.</p>
+                <p className="mt-1 text-sm text-slate-500">Doplnenie: {Math.min(premiumMiniModuleIndex + 1, includedPremiumModules.length)}/{Math.max(includedPremiumModules.length, 1)} hotovo</p>
 
                 {includedPremiumModules.length === 0 ? (
                   <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -844,7 +901,7 @@ ${url}`;
                 ) : null}
 
                 <div className="mt-5 flex flex-wrap gap-3">
-                  <button type="button" onClick={completePremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Preskočiť mini otázky</button>
+                  <button type="button" onClick={completePremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Vygenerovať analýzu</button>
                   <button type="button" onClick={() => goToPremiumStep(2)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Späť na výber oblastí</button>
                 </div>
               </article>
@@ -862,10 +919,6 @@ ${url}`;
                   <ul className="mt-2 list-inside list-disc space-y-1 text-slate-700">{synthesis.situations.map((x) => <li key={x}>{x}</li>)}</ul>
                   <h3 className="mt-4 text-base font-semibold">Najčastejšia pasca + čo s tým</h3>
                   <p className="mt-2 text-slate-700">{synthesis.trap}</p>
-                  <h3 className="mt-4 text-base font-semibold">Ak si vybral fokus, čo teraz upraviť</h3>
-                  <p className="mt-2 text-slate-700">{synthesis.focusAdjustments}</p>
-                  <h3 className="mt-4 text-base font-semibold">Ako do toho zapadajú tvoje kontexty</h3>
-                  <p className="mt-2 text-slate-700">{synthesis.contexts}</p>
                 </article>
 
                 <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -877,63 +930,114 @@ ${url}`;
                     <button type="button" onClick={() => void shareWithLink(`Highlight: ${synthesis.summary[0]} Tip: ${synthesis.situations[0]}`, "Viora highlight")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Zdieľať highlight</button>
                     <Tooltip text="Len highlight, nie celý report." />
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">Pripravujeme odmeny za odporúčania ✨ <span className="inline-flex"><Tooltip text="Čoskoro: mini-report zdarma pri zdieľaní." /></span></p>
-                </article>
-
-                <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-semibold">Čoskoro / plánované</h3>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">Plánované</span>
-                  </div>
-                  <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-slate-700">
-                    {plannedUpgradeItems.slice(0, 3).map((item) => <li key={item}>{item}</li>)}
-                  </ul>
                 </article>
 
                 <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-semibold">Mini reporty (0.99)</h2>
-                  <p className="mt-2 text-slate-600">Samostatné mini výsledky pre jednotlivé kontexty. Neovplyvňujú Komplexnú analýzu, sú to doplnkové výstupy.</p>
+                  <p className="mt-2 text-slate-600">Krátky samostatný výsledok. Nezasahuje do hlbokej analýzy.</p>
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     {modules.map((m) => {
-                      const unlockedText = state.unlocks.miniReports?.[m.slug];
+                      const saved = state.unlocks.miniReports?.[m.slug];
+                      const result = miniReportResultByModule[m.slug];
+                      const status = miniReportStatusByModule[m.slug] ?? (saved && saved !== "__UNLOCKED__" ? "ready" : saved === "__UNLOCKED__" ? "collecting" : "locked");
+                      const wizardQuestions = modulesBySlug[m.slug].questions.slice(0, 3);
+                      const currentIdx = miniReportQuestionByModule[m.slug] ?? 0;
+                      const currentQuestion = wizardQuestions[currentIdx];
+
                       return (
-                        <div key={m.slug} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div id={`mini-card-${m.slug}`} key={m.slug} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                           <div className="flex items-center justify-between gap-2">
                             <h3 className="font-medium text-slate-900">{m.title}</h3>
-                            <span className="rounded-full bg-slate-200 px-2 py-1 text-xs text-slate-700">0,99 €</span>
+                            <span className="rounded-full bg-slate-200 px-2 py-1 text-xs text-slate-700">0,99 €</span><Tooltip text="0.99 = samostatný mini výsledok hneď teraz (neovplyvní analýzu)." />
                           </div>
                           <p className="mt-1 text-sm text-slate-600">{m.description}</p>
-                          {!unlockedText ? (
-                            <button type="button" onClick={() => openPaymentModal({ kind: "mini_report", moduleSlug: m.slug })} className="mt-3 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Odomknúť mini report (0.99)</button>
-                          ) : (
-                            <div className="mt-3 space-y-3">
-                              <button type="button" className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zobraziť mini report</button>
-                              <div className="whitespace-pre-line rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">{unlockedText}</div>
+
+                          {status === "locked" && (
+                            <div className="mt-3 flex items-center gap-2">
+                              <button type="button" onClick={() => openPaymentModal({ kind: "mini_report", moduleSlug: m.slug })} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Odomknúť mini report (0.99)</button>
+                              <Tooltip text="Odomkne rýchly mini výsledok pre tento modul." />
+                            </div>
+                          )}
+
+                          {status === "collecting" && activeMiniReportModule === m.slug && currentQuestion && (
+                            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="text-sm text-slate-500">Mini report: otázka {currentIdx + 1}/{wizardQuestions.length}</p>
+                              <p className="mt-1 font-medium text-slate-900">{currentQuestion.question}</p>
+                              <div className="mt-3 grid gap-2">
+                                {currentQuestion.options.map((option) => (
+                                  <button key={option.label} type="button" onClick={() => {
+                                    const nextAnswers = { ...(miniReportAnswersByModule[m.slug] ?? {}), [currentQuestion.id]: option.label };
+                                    setMiniReportAnswersByModule((prev) => ({ ...prev, [m.slug]: nextAnswers }));
+                                    if (currentIdx >= wizardQuestions.length - 1) {
+                                      const templ = getMiniReportTemplate(m.slug);
+                                      setMiniReportResultByModule((prev) => ({ ...prev, [m.slug]: templ }));
+                                      setMiniReportStatusByModule((prev) => ({ ...prev, [m.slug]: "ready" }));
+                                      patchState({ unlocks: { ...state.unlocks, miniReports: { ...(state.unlocks.miniReports ?? {}), [m.slug]: `${templ.insight}
+
+${templ.nextStep}
+
+Metrika: ${templ.metric}
+Spúšťač: ${templ.trigger}` } } });
+                                      setActiveMiniReportModule(null);
+                                      showToast("Mini report pripravený ✅");
+                                    } else {
+                                      setMiniReportQuestionByModule((prev) => ({ ...prev, [m.slug]: currentIdx + 1 }));
+                                    }
+                                  }} className="rounded-lg border border-slate-200 p-3 text-left text-sm hover:border-slate-400">
+                                    {option.label}. {option.text}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {status === "ready" && (result || saved) && (
+                            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                              <div className="mb-2 flex items-center gap-2"><span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Už máš</span><Tooltip text="Tento mini report je už odomknutý." /></div>
+                              {result ? (
+                                <div className="space-y-2">
+                                  <p><span className="font-medium">Insight:</span> {result.insight}</p>
+                                  <p><span className="font-medium">Najbližší krok (7 dní):</span> {result.nextStep}</p>
+                                  <p><span className="font-medium">Metrika:</span> {result.metric}</p>
+                                  <p><span className="font-medium">Spúšťač:</span> {result.trigger}</p>
+                                </div>
+                              ) : (
+                                <div className="whitespace-pre-line">{saved}</div>
+                              )}
+                              <button type="button" onClick={() => { setActiveMiniReportModule(m.slug); setMiniReportStatusByModule((prev) => ({ ...prev, [m.slug]: "collecting" })); setMiniReportQuestionByModule((prev)=>({ ...prev, [m.slug]: 0 })); }} className="mt-3 rounded-full border border-slate-300 px-4 py-2 text-sm">Upraviť odpovede</button>
                             </div>
                           )}
                         </div>
                       );
                     })}
                   </div>
+                  <div className="mt-5">
+                    <button type="button" onClick={() => goToPremiumStep(5)} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Pokračovať na Tuning</button>
+                  </div>
                 </article>
+              </section>
+            )}
 
-
+            {premiumStep === 5 && (
+              <section className="space-y-6">
                 <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-semibold">Tuning / model úprav</h2>
-                  <p className="mt-2 text-slate-600">Vyber 1-2 focusy, ktoré chceš vedome upraviť v najbližších dňoch.</p>
+                  <p className="mt-2 text-slate-600">Vyber 1–2 focusy. Po výbere ťa presunieme na konkrétny checklist.</p>
+                  <p className="mt-1 text-sm text-slate-500">Vybraté focusy: {(state.tuning.choices ?? []).length}/2</p>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {tuningOptions.map((o) => {
                       const sel = (state.tuning.choices ?? []).includes(o);
-                      return <div key={o} className="flex items-start"><button type="button" onClick={() => onTuningToggle(o)} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button><Tooltip text={focusTooltips[o]} /></div>;
+                      return <div key={o} className="flex items-start"><button type="button" onClick={() => { showToast("Zapisujem fokus…"); onTuningToggle(o); showToast("Presúvam ťa na plán zmeny…"); }} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button><Tooltip text="Klikni a dostaneš 7-dňový checklist pre tento smer zmeny." /></div>;
                     })}
                   </div>
                   <div className="mt-5 flex gap-3">
-                    <button type="button" onClick={() => changePlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Uložiť úpravy</button>
+                    <button type="button" onClick={() => { showToast("Hotovo. Tu je tvoj 7-dňový plán."); changePlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Uložiť úpravy</button>
                   </div>
                 </article>
 
                 <article ref={changePlanRef} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h2 className="text-xl font-semibold">Návrh zmeny</h2>
+                  <h2 className="text-xl font-semibold">Tvoj plán zmeny</h2>
+                  <p className="mt-2 text-sm text-slate-600">Konkrétne kroky na 7 dní. Stačí robiť 1–2 malé veci denne.</p>
                   {(state.tuning.choices ?? []).length === 0 ? (
                     <p className="mt-3 text-sm text-slate-600">Vyber aspoň jeden fokus v tuningu a zobrazí sa konkrétny 7-dňový checklist.</p>
                   ) : (
@@ -958,24 +1062,6 @@ ${url}`;
                                   </div>
                                 </details>
                               ))}
-                            </div>
-                            <div className="mt-4 grid gap-3 md:grid-cols-2">
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Spúšťače</p>
-                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.triggers.map((item) => <li key={item}>{item}</li>)}</ul>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Meranie</p>
-                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.metrics.map((item) => <li key={item}>{item}</li>)}</ul>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Pozor na</p>
-                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.pitfalls.map((item) => <li key={item}>{item}</li>)}</ul>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Fallback</p>
-                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.fallback.map((item) => <li key={item}>{item}</li>)}</ul>
-                              </div>
                             </div>
                           </div>
                         );
