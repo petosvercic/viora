@@ -126,11 +126,57 @@ const changePlanByFocus: Record<(typeof tuningOptions)[number], ChangePlan> = {
 };
 
 const plannedUpgradeItems = [
-  "Viora Personaliss – AI “decision coach” režim (plánované).",
-  "Viora Strategy – týždenné plány + checkpointy (plánované).",
-  "Viora Timeline – história rozhodnutí a tracking zmeny (plánované).",
-  "Viora Pulse – notifikácie a mikro-návyky (plánované).",
+  "Viora Coaching (plánované).",
+  "Viora Weekly (plánované).",
+  "Viora Review (plánované).",
+  "Viora Tracker (plánované).",
 ];
+
+export const landingHeadlines = [
+  "Viora Profile: rozhodovanie v 1 vete + plán na 7 dní",
+  "Prestaň overthinkovať. Daj tomu rámec za 2 min.",
+  "Zistíš svoj “rozhodovací podpis” a čo s tým",
+  "Menej stresu v neistote: konkrétny mini plán",
+  "Komunikácia pod tlakom? Tu máš rituál",
+  "Priority bez chaosu: 1 úloha denne",
+  "Finančné rozhodnutia: nastav hranice rizika",
+  "Hlboká analýza, mini reporty, tuning zmeny",
+  "Nie motivácia. Checklist, ktorý funguje.",
+  "Viora: praktický decision coach (bez kecov).",
+] as const;
+
+export const overlayLines = [
+  "Rozhodovanie v 1 vete",
+  "Prestaň sa točiť dokola",
+  "7-dňový plán, nie motivácia",
+  "Tvoj rozhodovací podpis",
+  "Menej stresu, viac krokov",
+  "2 min. Výstup hneď",
+  "Neistota? Tu máš rámec",
+  "Vyber 2 oblasti v cene",
+  "Mini otázky = presnejší výsledok",
+  "Mini report za 0.99€",
+  "Tuning: vyber 1–2 focusy",
+  "Checklist zmeny na 7 dní",
+  "Fakty. Kroky. Hotovo.",
+  "Pre ľudí, čo overthinkujú",
+  "Zaseknutý? Urob najmenší krok",
+  "Menej detailov, viac výsledkov",
+  "Pod tlakom komunikujem zle",
+  "Viora ti to zjednoduší",
+  "Max strata. Max zisk.",
+  "Minimum deň: 12 min",
+  "1 úloha dnes. Dokonči.",
+  "Nastav hranice rozhodovania",
+  "Zdieľateľný highlight, nie román",
+  "Bez AI balastu",
+  "Reálne návyky, nie teória",
+  "Zmena bez preťaženia",
+  "Tvoj plán, tvoj štýl",
+  "Mini výsledok hneď teraz",
+  "Viora Profile zdarma",
+  "Premium = hlboký výsledok",
+] as const;
 
 const buildMiniReportTextFromBase = (slug: ModuleSlug, baseAnswers: Record<number, OptionLabel> | undefined) => {
   const moduleMeta = modulesBySlug[slug];
@@ -150,6 +196,16 @@ const focusTooltips: Record<(typeof tuningOptions)[number], string> = {
   "Rozumná kontrola": "Nastaví hranice kontroly bez rigidity.",
 };
 
+const hashSeedToIndex = (seedText: string, modulo: number) => {
+  let hash = 0;
+  for (let i = 0; i < seedText.length; i += 1) {
+    hash = (hash << 5) - hash + seedText.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % modulo;
+};
+
+type PersonalProof = { choice: string; signal: string; impact: string };
 
 function HoverTip({ text, children }: { text: string; children: import("react").ReactNode }) {
   return (
@@ -161,6 +217,7 @@ function HoverTip({ text, children }: { text: string; children: import("react").
     </span>
   );
 }
+
 export default function ProfilePage() {
   const [state, setState] = useState<VioraStateV1 | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -176,6 +233,7 @@ export default function ProfilePage() {
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [isPaying, setIsPaying] = useState(false);
+  const [activeHeadline, setActiveHeadline] = useState<(typeof landingHeadlines)[number]>(landingHeadlines[0]);
 
   const [selectedModule, setSelectedModule] = useState<ModuleSlug | null>(null);
   const [moduleStep, setModuleStep] = useState(0);
@@ -269,6 +327,61 @@ export default function ProfilePage() {
       attempt,
     });
   }, [state, scored, fullReport, seed, attempt, premiumMiniResults]);
+
+
+  const personalProofs = useMemo<PersonalProof[]>(() => {
+    const proofItems: PersonalProof[] = [];
+    const dimensionSignals: Record<string, { low: string; medium: string; high: string }> = {
+      speed: { low: "V rozhodovaní si dávaš čas na širší kontext pred finálnym krokom.", medium: "Pri dôležitých voľbách kombinuješ tempo s krátkym overením.", high: "Máš tendenciu ísť rýchlo po prvom silnom signále." },
+      processing: { low: "Viac sa opieraš o intuívny obraz než o detailnú štruktúru.", medium: "Používaš mix rýchleho odhadu a konkrétnych dát.", high: "Preferuješ systematické porovnanie pred záverom." },
+      risk: { low: "V neistote skôr čakáš na kritické informácie.", medium: "Vieš spraviť dočasný krok a nechať priestor na úpravu.", high: "Aj pri neúplných dátach pokračuješ a rozhoduješ rýchlo." },
+      pressure: { low: "Pod tlakom sa častejšie vraciaš k prehodnocovaniu.", medium: "Výkon držíš, ale cítiš rastúce napätie.", high: "Pod záťažou zväčša ostávaš vecný a prioritizuješ." },
+      control: { low: "Vyhovuje ti otvorenejší postup bez silnej kontroly.", medium: "Stačí ti základný rámec a detaily dolaďuješ priebežne.", high: "Preferuješ jasné pravidlá a kontrolný rámec." },
+    };
+    const dimensionImpacts: Record<string, string> = {
+      speed: "V praxi to mení tempo uzatvárania rozhodnutí a počet návratov späť.",
+      processing: "Prejaví sa to v tom, koľko štruktúry potrebuješ pred finálnym rozhodnutím.",
+      risk: "V praxi to ovplyvňuje, ako rýchlo konáš, keď chýbajú dáta.",
+      pressure: "Najviac to vidno v kvalite rozhodnutí počas časového tlaku.",
+      control: "Prejaví sa to v tom, koľko rámca potrebuješ, aby si sa cítil stabilne.",
+    };
+
+    for (const q of questions) {
+      if (proofItems.length >= 5) break;
+      const selected = answers[q.id];
+      if (!selected) continue;
+      const option = q.options.find((item) => item.label === selected);
+      if (!option) continue;
+      const dim = option.scoring.primary.dimension;
+      const level = scored.level[dim];
+      proofItems.push({
+        choice: `${q.question} → ${option.label}: ${option.text}`,
+        signal: dimensionSignals[dim][level],
+        impact: dimensionImpacts[dim],
+      });
+    }
+
+    for (const slug of includedPremiumModules) {
+      if (proofItems.length >= 5) break;
+      const answerSet = premiumMiniAnswers[slug];
+      if (!answerSet) continue;
+      const moduleDef = modulesBySlug[slug];
+      const answeredEntry = Object.entries(answerSet)[0];
+      if (!answeredEntry) continue;
+      const qId = Number(answeredEntry[0]);
+      const label = answeredEntry[1];
+      const moduleQ = moduleDef.questions.find((item) => item.id === qId);
+      const moduleOption = moduleQ?.options.find((item) => item.label === label);
+      if (!moduleQ || !moduleOption) continue;
+      proofItems.push({
+        choice: `${moduleDef.title}: ${moduleOption.label} – ${moduleOption.text}`,
+        signal: `V kontexte „${moduleDef.title}“ preferuješ štýl, ktorý sa opakuje aj v hlbokej analýze.`,
+        impact: "Tento kontextový signál spresňuje odporúčania v praktických situáciách.",
+      });
+    }
+
+    return proofItems.slice(0, 5);
+  }, [answers, scored.level, includedPremiumModules, premiumMiniAnswers]);
 
   const moduleConfig = selectedModule ? modulesBySlug[selectedModule] : null;
   const activeModuleQuestion = moduleConfig ? moduleConfig.questions[moduleStep] : null;
@@ -447,6 +560,15 @@ ${url}`;
 
     void verify();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    const deviceSeed = ref || getShareRefId();
+    const idx = hashSeedToIndex(deviceSeed, landingHeadlines.length);
+    setActiveHeadline(landingHeadlines[idx]);
+  }, []);
+
 
   useEffect(() => {
     if (!state || mode !== "premium_steps") return;
@@ -749,6 +871,7 @@ ${url}`;
       <div className="relative z-10 mx-auto w-full max-w-5xl px-6 py-12">
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
           <p className="text-sm uppercase tracking-[0.16em] text-slate-500">Viora Decision Profile</p>
+          <p className="mt-2 text-sm text-slate-600">{activeHeadline}</p>
           {state.identity.name && <p className="mt-1 text-sm text-slate-600">Ahoj, {state.identity.name}</p>}
         </div>
 
@@ -767,6 +890,40 @@ ${url}`;
                 <button title="Skopíruje krátky podpis + link. Bez osobných dát." type="button" onClick={() => void shareWithLink(`Môj rozhodovací podpis: ${freeReport.signature.split("\n")[0]}`, "Viora podpis")} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať podpis</button>
                 <button ref={unlockRef} type="button" onClick={() => openPaymentModal({ kind: "full" })} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Chcem hlbší profil</button>
                 <button type="button" onClick={onTryAgain} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Spustiť znova kvíz</button>
+              </div>
+            </article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Free vs Premium</h2>
+              <p className="mt-2 text-sm text-slate-600">Zaberie to 2 min. Výstup je okamžitý.</p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Free</p>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">
+                    <li>Rozhodovací podpis</li>
+                    <li>Rizikové miesto</li>
+                    <li>1 optimalizačný zásah</li>
+                  </ul>
+                </div>
+                <div className="rounded-xl border border-slate-900 bg-slate-900 p-4 text-slate-100">
+                  <p className="text-sm font-semibold">Premium (5€)</p>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-200">
+                    <li>Viora Deep: kompletná hlboká analýza</li>
+                    <li>Viora Plan: 7-dňový checklist zmeny</li>
+                    <li>Viora Minis: mini reporty (0.99) – voliteľné</li>
+                    <li>Viora Tuning: 1–2 focusy + presný plán</li>
+                    <li>Zdieľateľný highlight (1 veta + 1 tip)</li>
+                    <li>Doplnenie kontextu (mini otázky)</li>
+                  </ul>
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-slate-700">Ak ti to nebude dávať zmysel, ozvi sa. Vyriešime to.</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {['Viora Deep (preview)', 'Viora Plan (preview)', 'Viora Minis (preview)'].map((item) => (
+                  <div key={item} className="rounded-xl border border-slate-200 bg-slate-100/80 p-4">
+                    <p className="text-sm font-medium text-slate-800">{item}</p>
+                    <div className="mt-3 h-12 rounded-md bg-slate-300/70 blur-[2px]" />
+                  </div>
+                ))}
               </div>
             </article>
             {renderAddonArea(false)}
@@ -895,6 +1052,20 @@ ${url}`;
                   <ul className="mt-2 list-inside list-disc space-y-1 text-slate-700">{synthesis.situations.map((x) => <li key={x}>{x}</li>)}</ul>
                   <h3 className="mt-4 text-base font-semibold">Najčastejšia pasca + čo s tým</h3>
                   <p className="mt-2 text-slate-700">{synthesis.trap}</p>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-base font-semibold">Prečo ti vyšla práve táto analýza</h3>
+                  <p className="mt-2 text-sm text-slate-600">Personal proof: signály priamo z tvojich odpovedí.</p>
+                  <div className="mt-4 space-y-3">
+                    {personalProofs.slice(0, 5).map((proof, idx) => (
+                      <div key={`${proof.choice}-${idx}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-sm"><span className="font-medium">Tvoja voľba:</span> {proof.choice}</p>
+                        <p className="mt-1 text-sm"><span className="font-medium">Čo to signalizuje:</span> {proof.signal}</p>
+                        <p className="mt-1 text-sm"><span className="font-medium">Ako sa to prejaví:</span> {proof.impact}</p>
+                      </div>
+                    ))}
+                  </div>
                 </article>
 
                 <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1074,10 +1245,10 @@ Spúšťač: ${templ.trigger}` } } });
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl md:p-8">
             <h3 className="text-xl font-semibold">Chystáme pre vás</h3>
             <ul className="mt-4 list-inside list-disc space-y-2 text-sm text-slate-700">
-              <li>Osobný coach-management režim (malý doplatok)</li>
-              <li>Automatické týždenné plány + checkpointy</li>
-              <li>AI revízia rozhodnutí a spätná väzba</li>
-              <li>Notifikácie, tracking a mikro-návyky</li>
+              <li>Viora Coaching</li>
+              <li>Viora Weekly</li>
+              <li>Viora Review</li>
+              <li>Viora Tracker</li>
             </ul>
             <p className="mt-4 text-xs text-slate-500">Pripravujeme. Dostupnosť a rozsah sa môžu meniť.</p>
             <div className="mt-6 flex justify-end gap-3">
