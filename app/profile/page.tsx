@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { canAccessModule, getModuleStatus } from "../lib/access";
 import { scoreAnswers, type OptionLabel, questions } from "../lib/decisionModel";
 import { generateModuleAddon } from "../lib/moduleAddonGen";
@@ -142,6 +142,45 @@ Mini report bol vytvorený z tvojho základného profilu (${baseScore.level.spee
 Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
 };
 
+const focusTooltips: Record<(typeof tuningOptions)[number], string> = {
+  "Rýchlejšie rozhodovanie": "Skráti rozhodovací cyklus bez chaotických skratiek.",
+  "Menej stresu v neistote": "Zníži tlak pri nejasnosti a stabilizuje reakcie.",
+  "Menej zacyklenia na detailoch": "Pomôže pustiť mikrokontrolu a ísť na podstatu.",
+  "Lepšie zvládanie tlaku": "Zlepší výkon pod tlakom bez preťaženia.",
+  "Rozumná kontrola": "Nastaví hranice kontroly bez rigidity.",
+};
+
+function Tooltip({ text, label = "Viac info" }: { text: string; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label={label}
+        aria-describedby={open ? id : undefined}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] leading-none text-slate-600"
+      >
+        ⓘ
+      </button>
+      {open && (
+        <span id={id} role="tooltip" className="absolute left-1/2 top-7 z-40 w-56 -translate-x-1/2 rounded-md bg-slate-900 px-2 py-1 text-[11px] text-white shadow-lg">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function ProfilePage() {
   const [state, setState] = useState<VioraStateV1 | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -192,9 +231,9 @@ export default function ProfilePage() {
   const premiumStep = state?.ui.premiumStep ?? 1;
   const premiumStepLabels: Record<1 | 2 | 3 | 4, string> = {
     1: "Premium Zone",
-    2: "Upgrade",
-    3: "Supplement",
-    4: "Tuning",
+    2: "Upgrade výber",
+    3: "Mini doplnenie",
+    4: "Hlboký výsledok",
   };
 
   const includedPremiumModules = useMemo(() => (state?.unlocks.included ?? []).filter((slug) => modulesBySlug[slug]), [state?.unlocks.included]);
@@ -264,6 +303,33 @@ export default function ProfilePage() {
       setShareMessage("Skopírované do schránky ✅");
     } catch {
       setShareMessage("Nepodarilo sa skopírovať text.");
+    }
+  };
+
+
+  const getShareRefId = () => {
+    const key = "viora_share_ref";
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const created = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(key, created);
+    return created;
+  };
+
+  const shareWithLink = async (text: string, shareTitle?: string) => {
+    const ref = getShareRefId();
+    const url = `${window.location.origin}/profile?ref=${ref}`;
+    const payload = `${text}
+${url}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: shareTitle ?? "Viora profil", text, url });
+      } else {
+        await copyText(payload);
+      }
+      setShareMessage("Zdieľací text pripravený ✅");
+    } catch {
+      setShareMessage("Zdieľanie bolo zrušené alebo zlyhalo.");
     }
   };
 
@@ -658,13 +724,13 @@ export default function ProfilePage() {
 
         {mode === "free_results" && (
           <section className="space-y-6">
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Tvoj rozhodovací podpis</h2><div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.signature}</div></article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Tvoj rozhodovací podpis</h2><div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.signature}</div><p className="mt-4 text-sm text-slate-600">Zdieľaj svoj podpis. Najlepšie funguje v chate ako 1 veta.</p><div className="mt-3 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void shareWithLink(`Môj rozhodovací podpis: ${freeReport.signature.split("\n")[0]}`, "Viora podpis")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Zdieľať profil</button><Tooltip text="Skopíruje krátky text + link. Bez citlivých dát." /><button type="button" onClick={() => void shareWithLink(`Viora karta: ${freeReport.signature.split("\n")[0]}`, "Viora karta")} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať ako kartu</button></div><p className="mt-2 text-xs text-slate-500">Pripravujeme odmeny za odporúčania ✨ <span className="inline-flex"><Tooltip text="Čoskoro: mini-report zdarma pri zdieľaní." /></span></p></article>
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Rizikové miesto</h2><div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.riskSpot}</div></article>
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Jeden optimalizačný zásah</h2>
               <div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.intervention}</div>
               <div className="mt-5 flex flex-wrap gap-3">
-                <button type="button" onClick={() => void copyText(`Môj Viora profil: ${freeReport.signature.split("\n")[0]}`)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať</button>
+                <button type="button" onClick={() => void shareWithLink(`Môj rozhodovací podpis: ${freeReport.signature.split("\n")[0]}`, "Viora podpis")} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať podpis</button><Tooltip text="Skopíruje krátky podpis + link. Bez osobných dát." />
                 <button ref={unlockRef} type="button" onClick={() => openPaymentModal({ kind: "full" })} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Chcem hlbší profil</button>
                 <button type="button" onClick={onTryAgain} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Spustiť znova kvíz</button>
               </div>
@@ -687,15 +753,30 @@ export default function ProfilePage() {
           <section className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-2">
-                {[1, 2, 3, 4].map((s) => (
-                  <button key={s} type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
-                    {premiumStepLabels[s as 1 | 2 | 3 | 4]}
-                  </button>
-                ))}
+                {[1, 2, 3, 4].map((s) => {
+                  const tip = s === 1
+                    ? "Tvoj premium priestor: výsledky, doplnky a plán zmeny."
+                    : s === 2
+                      ? "Vyber 2 oblasti v cene, ktoré zapracujeme do hlbokej analýzy."
+                      : s === 3
+                        ? "Krátke otázky, aby analýza sedela na tvoj kontext."
+                        : "Komplexná analýza + mini-reporty + tuning a checklist zmeny.";
+                  return (
+                    <div key={s} className="inline-flex items-center">
+                      <button type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
+                        {premiumStepLabels[s as 1 | 2 | 3 | 4]}
+                      </button>
+                      <Tooltip text={tip} />
+                    </div>
+                  );
+                })}
               </div>
-              <button type="button" onClick={() => setShowComingSoon(true)} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
-                Coming soon
-              </button>
+              <div className="inline-flex items-center">
+                <button type="button" onClick={() => setShowComingSoon(true)} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                  Coming soon
+                </button>
+                <Tooltip text="Ochutnávka plánovaných upgradeov a budúcich “magic” funkcií." />
+              </div>
             </div>
 
             {miniFlowNotice && <p className="text-sm text-amber-700">{miniFlowNotice}</p>}
@@ -718,7 +799,7 @@ export default function ProfilePage() {
             {premiumStep === 2 && (
               <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="text-xl font-semibold">Vybrané oblasti (2 v cene)</h2>
-                <p className="mt-2 text-slate-600">Tieto oblasti zapracujeme do tvojej Komplexnej analýzy.</p>
+                <p className="mt-2 text-slate-600">Vyber 2 oblasti. Potom doplníme pár krátkych otázok a až potom vygenerujeme analýzu.</p>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {modules.filter((m) => !m.isFree).map((m) => {
                     const selected = (state.unlocks.included ?? []).includes(m.slug);
@@ -741,7 +822,7 @@ export default function ProfilePage() {
             {premiumStep === 3 && (
               <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="text-xl font-semibold">Mini doplňujúce otázky</h2>
-                <p className="mt-2 text-slate-600">Najprv doplníme vybrané kontexty, potom pripravíme kompletnú Komplexnú analýzu.</p>
+                <p className="mt-2 text-slate-600">Zaberie to 30–90 sekúnd. Pomôže to spraviť výstup presnejší.</p>
 
                 {includedPremiumModules.length === 0 ? (
                   <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -786,6 +867,19 @@ export default function ProfilePage() {
                   <h3 className="mt-4 text-base font-semibold">Ako do toho zapadajú tvoje kontexty</h3>
                   <p className="mt-2 text-slate-700">{synthesis.contexts}</p>
                 </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-base font-semibold">Zdieľateľný highlight</h3>
+                  <p className="mt-2 text-sm text-slate-700">Jedna veta + jeden tip. Nie celý report.</p>
+                  <p className="mt-2 text-sm text-slate-700"><span className="font-medium">Insight:</span> {synthesis.summary[0]}</p>
+                  <p className="mt-1 text-sm text-slate-700"><span className="font-medium">Tip:</span> {synthesis.situations[0]}</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button type="button" onClick={() => void shareWithLink(`Highlight: ${synthesis.summary[0]} Tip: ${synthesis.situations[0]}`, "Viora highlight")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Zdieľať highlight</button>
+                    <Tooltip text="Len highlight, nie celý report." />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">Pripravujeme odmeny za odporúčania ✨ <span className="inline-flex"><Tooltip text="Čoskoro: mini-report zdarma pri zdieľaní." /></span></p>
+                </article>
+
                 <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-semibold">Čoskoro / plánované</h3>
@@ -830,7 +924,7 @@ export default function ProfilePage() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {tuningOptions.map((o) => {
                       const sel = (state.tuning.choices ?? []).includes(o);
-                      return <button key={o} type="button" onClick={() => onTuningToggle(o)} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button>;
+                      return <div key={o} className="flex items-start"><button type="button" onClick={() => onTuningToggle(o)} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button><Tooltip text={focusTooltips[o]} /></div>;
                     })}
                   </div>
                   <div className="mt-5 flex gap-3">
@@ -894,7 +988,7 @@ export default function ProfilePage() {
           </section>
         )}
 
-        <div className="mt-8"><Link href="/" className="inline-flex items-center rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700">Späť na úvod</Link></div>
+        <div className="mt-8 flex items-center gap-2"><Link href="/" className="inline-flex items-center rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700">Späť na úvod</Link><Tooltip text="Vráti ťa na úvod. Výsledky zostanú uložené." /></div>
       </div>
 
       {showComingSoon && (
