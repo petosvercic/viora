@@ -7,8 +7,9 @@ import { generateChangeTool } from "../lib/changeToolGen";
 import { scoreAnswers, type OptionLabel, questions } from "../lib/decisionModel";
 import { generateModuleAddon } from "../lib/moduleAddonGen";
 import { modules, modulesBySlug, type ModuleOptionLabel, type ModuleSlug } from "../lib/modules";
+import { resolveVariantsFromIds, selectBaseQuizVariants, slotIds } from "../lib/questionPool";
 import { generateFreeReport, generateFullReport } from "../lib/reportGen";
-import { deriveProfileMode, getAnsweredCount, isQuizComplete, loadVioraState, patchVioraState, saveVioraState, withMode, type ProfileMode, type VioraStateV1 } from "../lib/vioraState";
+import { createNextRunState, deriveProfileMode, ensureBaseRunConfig, getAnsweredCount, isQuizComplete, loadVioraState, patchVioraState, saveVioraState, withMode, type ProfileMode, type VioraStateV1 } from "../lib/vioraState";
 
 type TransitionPhase = "idle" | "transitioning";
 type AddonResult = { title: string; insight: string; riskSpot: string; action: string };
@@ -58,20 +59,25 @@ export default function ProfilePage() {
   const unlockRef = useRef<HTMLButtonElement | null>(null);
 
   const answers = state?.base.answers ?? {};
+  const variantSeed = state?.base.seed ?? "viora";
+  const variantRunIndex = state?.base.runIndex ?? 0;
   const scored = useMemo(() => scoreAnswers(answers), [answers]);
-  const freeReport = useMemo(() => generateFreeReport(scored), [scored]);
-  const fullReport = useMemo(() => generateFullReport(scored), [scored]);
+  const freeReport = useMemo(() => generateFreeReport(scored, { seed: variantSeed, runIndex: variantRunIndex }), [scored, variantSeed, variantRunIndex]);
+  const fullReport = useMemo(() => generateFullReport(scored, { seed: variantSeed, runIndex: variantRunIndex }), [scored, variantSeed, variantRunIndex]);
   const changeTool = useMemo(() => generateChangeTool(scored, state?.tuning.choices ?? []), [scored, state?.tuning.choices]);
 
-  const currentQuestion = questions[step];
+  const selectedVariants = useMemo(() => {
+    const fromIds = resolveVariantsFromIds(state?.base.selectedVariantIds ?? {});
+    if (fromIds) return fromIds;
+    return selectBaseQuizVariants(variantSeed, variantRunIndex);
+  }, [state?.base.selectedVariantIds, variantSeed, variantRunIndex]);
+
+  const currentQuestion = selectedVariants[slotIds[step]];
   const progress = ((step + 1) / questions.length) * 100;
 
   const mode: ProfileMode = state ? deriveProfileMode(state) : "quiz";
   const displayMode: ProfileMode = state?.ui.mode && mode !== "quiz" && mode !== "freeResult" ? state.ui.mode : mode;
   const isPremiumUser = state?.unlocks.full === true;
-
-  const currentQuestion = questions[step];
-  const progress = ((step + 1) / questions.length) * 100;
 
   const moduleConfig = selectedModule ? modulesBySlug[selectedModule] : null;
   const activeModuleQuestion = moduleConfig ? moduleConfig.questions[moduleStep] : null;
@@ -116,7 +122,7 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    const loaded = loadVioraState();
+    const loaded = ensureBaseRunConfig(loadVioraState());
     const normalized = withMode(loaded, deriveProfileMode(loaded));
     setState(normalized);
     saveVioraState(normalized);
@@ -295,9 +301,9 @@ export default function ProfilePage() {
     }, 360);
   };
 
-  const onSelect = (questionId: number, label: OptionLabel) => {
+  const onSelect = (_questionId: number, label: OptionLabel) => {
     if (!state) return;
-    const nextAnswers = { ...answers, [questionId]: label };
+    const nextAnswers = { ...answers, [_questionId]: label };
     setTransitionPhase("transitioning");
 
     window.setTimeout(() => {
@@ -352,6 +358,19 @@ export default function ProfilePage() {
     );
     setState(next);
     saveVioraState(next);
+  };
+
+  const tryAgain = () => {
+    if (!state) return;
+    const next = createNextRunState(state);
+    setState(next);
+    saveVioraState(next);
+    setStep(0);
+    setSelectedModule(null);
+    setModuleAnswers({});
+    setModuleStep(0);
+    setPendingModulePurchase(null);
+    setModuleNotice(null);
   };
 
   const resetModule = () => {
@@ -475,8 +494,8 @@ export default function ProfilePage() {
 
           <h1 className="text-2xl font-semibold leading-snug text-slate-900 md:text-3xl">{currentQuestion.question}</h1>
           <div className="mt-7 grid gap-4">
-            {currentQuestion.options.map((option) => (
-              <button key={option.label} type="button" onClick={() => onSelect(currentQuestion.id, option.label)} disabled={transitionPhase === "transitioning"} className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70">
+            {currentQuestion?.options.map((option) => (
+              <button key={option.label} type="button" onClick={() => onSelect(slotIds[step], option.label)} disabled={transitionPhase === "transitioning"} className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Možnosť {option.label}</p>
                 <p className="mt-2 text-base text-slate-900 md:text-lg">{option.text}</p>
               </button>
@@ -544,6 +563,9 @@ export default function ProfilePage() {
                 <button ref={unlockRef} type="button" onClick={() => openPaymentModal({ kind: "full" })} className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800">
                   Odomknúť FULL 4,99 €
                 </button>
+                <button type="button" onClick={tryAgain} className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                  Skúsiť znova
+                </button>
               </div>
             </article>
             {renderAddonArea()}
@@ -578,6 +600,9 @@ export default function ProfilePage() {
                   className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >
                   Zdieľať Premium
+                </button>
+                <button type="button" onClick={tryAgain} className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                  Skúsiť znova
                 </button>
               </div>
             </article>

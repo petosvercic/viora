@@ -1,7 +1,10 @@
 import { questions, type OptionLabel } from "./decisionModel";
+import { selectBaseQuizVariants, slotIds, type SlotId } from "./questionPool";
 import { modulesBySlug, type ModuleSlug } from "./modules";
 
 export type ProfileMode = "quiz" | "freeResult" | "premiumResult" | "tuning" | "changeTool" | "premiumHub";
+
+type VariantIds = Partial<Record<SlotId, string>>;
 
 export type VioraStateV1 = {
   version: 1;
@@ -13,6 +16,9 @@ export type VioraStateV1 = {
   base: {
     answers?: Record<number, OptionLabel>;
     computedAt?: number;
+    seed?: string;
+    runIndex?: number;
+    selectedVariantIds?: VariantIds;
   };
   unlocks: {
     full?: boolean;
@@ -66,6 +72,34 @@ const normalizeAnswers = (value: unknown): Record<number, OptionLabel> | undefin
   return Object.keys(next).length ? next : undefined;
 };
 
+const normalizeVariantIds = (value: unknown): VariantIds => {
+  if (!value || typeof value !== "object") return {};
+  const out: VariantIds = {};
+  for (const slotId of slotIds) {
+    const raw = (value as Record<string, unknown>)[String(slotId)];
+    if (typeof raw === "string") out[slotId] = raw;
+  }
+  return out;
+};
+
+const normalizeSeed = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed || undefined;
+};
+
+const createSessionSeed = (): string => {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+const normalizeRunIndex = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+};
+
 export const getAnsweredCount = (state: VioraStateV1): number => Object.keys(state.base.answers ?? {}).length;
 
 export const isQuizComplete = (state: VioraStateV1): boolean => getAnsweredCount(state) >= questions.length;
@@ -85,6 +119,9 @@ export const sanitizeVioraState = (value: Partial<VioraStateV1> | null | undefin
     base: {
       answers: normalizeAnswers(raw.base?.answers),
       computedAt: typeof raw.base?.computedAt === "number" ? raw.base.computedAt : undefined,
+      seed: normalizeSeed(raw.base?.seed),
+      runIndex: normalizeRunIndex(raw.base?.runIndex),
+      selectedVariantIds: normalizeVariantIds(raw.base?.selectedVariantIds),
     },
     unlocks: {
       full: raw.unlocks?.full === true,
@@ -103,6 +140,36 @@ export const sanitizeVioraState = (value: Partial<VioraStateV1> | null | undefin
   };
 };
 
+export const ensureBaseRunConfig = (state: VioraStateV1): VioraStateV1 => {
+  const emailSeed = state.identity.email?.trim().toLowerCase();
+  const seed = emailSeed || state.base.seed || createSessionSeed();
+  const runIndex = normalizeRunIndex(state.base.runIndex);
+  let selectedVariantIds = state.base.selectedVariantIds ?? {};
+
+  const selectedMissing = slotIds.some((slotId) => !selectedVariantIds[slotId]);
+  if (selectedMissing) {
+    const selected = selectBaseQuizVariants(seed, runIndex);
+    selectedVariantIds = Object.fromEntries(slotIds.map((slotId) => [slotId, selected[slotId].id])) as VariantIds;
+  }
+
+  return patchVioraState(state, { base: { ...state.base, seed, runIndex, selectedVariantIds } });
+};
+
+export const createNextRunState = (state: VioraStateV1): VioraStateV1 => {
+  const baseSeed = state.identity.email?.trim().toLowerCase() || state.base.seed || createSessionSeed();
+  const runIndex = normalizeRunIndex(state.base.runIndex) + 1;
+  const selected = selectBaseQuizVariants(baseSeed, runIndex);
+  const selectedVariantIds = Object.fromEntries(slotIds.map((slotId) => [slotId, selected[slotId].id])) as VariantIds;
+
+  return withMode(
+    patchVioraState(state, {
+      base: { ...state.base, answers: {}, computedAt: undefined, seed: baseSeed, runIndex, selectedVariantIds },
+      ui: { ...state.ui, mode: "quiz", lastMode: "quiz" },
+    }),
+    "quiz",
+  );
+};
+
 export const deriveProfileMode = (state: VioraStateV1): ProfileMode => {
   if (!isQuizComplete(state)) return "quiz";
   if (!state.unlocks.full) return "freeResult";
@@ -119,8 +186,7 @@ export const canTransitionMode = (state: VioraStateV1, target: ProfileMode): boo
   if (target === "quiz") return !isQuizComplete(state);
   if (target === "freeResult") return isQuizComplete(state) && !state.unlocks.full;
   if (!state.unlocks.full) return false;
-  if (target === "premiumResult") return true;
-  if (target === "tuning") return true;
+  if (target === "premiumResult" || target === "tuning") return true;
   if (target === "changeTool" || target === "premiumHub") return state.tuning.done === true;
   return false;
 };
@@ -170,22 +236,15 @@ const migrateLegacyState = (): VioraStateV1 => {
   let name: string | undefined;
   let consent = false;
 
-  try {
-    answers = normalizeAnswers(JSON.parse(localStorage.getItem(LS_LAST_BASE_ANSWERS) || "null"));
-  } catch {}
+  try { answers = normalizeAnswers(JSON.parse(localStorage.getItem(LS_LAST_BASE_ANSWERS) || "null")); } catch {}
   try {
     const ts = Number(localStorage.getItem(LS_LAST_RUN_AT) || "0");
     computedAt = Number.isFinite(ts) && ts > 0 ? ts : undefined;
   } catch {}
 
   full = localStorage.getItem(LS_UNLOCKED_FULL) === "true";
-
-  try {
-    addons = normalizeModuleList(JSON.parse(localStorage.getItem(LS_UNLOCKED_ADDONS) || "[]"));
-  } catch {}
-  try {
-    included = normalizeModuleList(JSON.parse(localStorage.getItem(LS_INCLUDED_MODULES) || "[]"), 2);
-  } catch {}
+  try { addons = normalizeModuleList(JSON.parse(localStorage.getItem(LS_UNLOCKED_ADDONS) || "[]")); } catch {}
+  try { included = normalizeModuleList(JSON.parse(localStorage.getItem(LS_INCLUDED_MODULES) || "[]"), 2); } catch {}
   try {
     const rawChoices = JSON.parse(localStorage.getItem(LS_TUNING_CHOICES) || "[]");
     if (Array.isArray(rawChoices)) tuningChoices = rawChoices.filter((item): item is string => typeof item === "string").slice(0, 2);
@@ -199,10 +258,15 @@ const migrateLegacyState = (): VioraStateV1 => {
   if (typeof rawName === "string" && rawName.trim()) name = rawName.trim();
   consent = localStorage.getItem(LS_CONSENT) === "true";
 
+  const seed = email?.toLowerCase() || createSessionSeed();
+  const runIndex = 0;
+  const selected = selectBaseQuizVariants(seed, runIndex);
+  const selectedVariantIds = Object.fromEntries(slotIds.map((slotId) => [slotId, selected[slotId].id])) as VariantIds;
+
   return sanitizeVioraState({
     version: 1,
     identity: { email, name, consent },
-    base: { answers, computedAt },
+    base: { answers, computedAt, seed, runIndex, selectedVariantIds },
     unlocks: { full, addons, included },
     tuning: { done: tuningDone, choices: tuningChoices },
     ui: {},

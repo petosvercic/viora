@@ -1,6 +1,7 @@
 import type { LevelProfile, RawProfile } from "./decisionModel";
+import { pickCopy } from "./copyVariants";
 
-type ProfileInput = {
+export type ProfileInput = {
   raw: RawProfile;
   level: LevelProfile;
 };
@@ -54,13 +55,15 @@ const controlText = {
   low: "Funguješ flexibilne a dobre toleruješ otvorené, menej definované prostredie.",
 };
 
-export function generateFreeReport(profile: ProfileInput): FreeReport {
+export function generateFreeReport(profile: ProfileInput, variant?: { seed?: string; runIndex?: number }): FreeReport {
   const { raw, level } = profile;
+  const seed = variant?.seed ?? "viora";
+  const runIndex = variant?.runIndex ?? 0;
 
   const signature = [
     `${speedText[level.speed]} ${processingText[level.processing]}`,
     `${riskText[level.risk]} ${pressureText[level.pressure]}`,
-    `${controlText[level.control]} V súčte to vytvára konzistentný rozhodovací štýl, ktorý je čitateľný naprieč rôznymi situáciami.`,
+    `${controlText[level.control]} ${pickCopy("free.signature.tail", seed, runIndex)}`,
   ].join("\n\n");
 
   const riskCandidates = [
@@ -94,7 +97,7 @@ export function generateFreeReport(profile: ProfileInput): FreeReport {
   const topRisk = riskCandidates.sort((a, b) => b.score - a.score)[0];
   const riskSpot = [
     topRisk.text,
-    "Odporúčanie je držať jeden krátky checkpoint pred finálnym rozhodnutím: čo viem, čo neviem a čo je minimálny bezpečný krok. Tento rámec znižuje chybovosť bez výrazného spomalenia.",
+    `${pickCopy("free.risk.tail", seed, runIndex)} Tento rámec znižuje chybovosť bez výrazného spomalenia.`,
   ].join("\n\n");
 
   const intervention = [
@@ -102,19 +105,21 @@ export function generateFreeReport(profile: ProfileInput): FreeReport {
     level.control === "high"
       ? "Keďže potreba kontroly je u teba výraznejšia, dopredu si urč, ktoré 2 premenné musíš mať pod kontrolou a zvyšok nechaj ako priebežné monitorovanie. Získaš rýchlosť bez straty kvality."
       : "Ak máš nižšiu potrebu kontroly, pridaj si k rozhodnutiu jeden pevný bod verifikácie po 24 hodinách. Udržíš flexibilitu, no zároveň zvýšiš presnosť ďalších rozhodnutí.",
-    "Po týždni si spätne prejdi 3 rozhodnutia a vyhodnoť: čo fungovalo, čo bolo zbytočné a čo chceš zopakovať. Takto sa profil mení na praktický systém, nie iba jednorazový výstup.",
+    `${pickCopy("free.intervention.close", seed, runIndex)} Takto sa profil mení na praktický systém, nie iba jednorazový výstup.`,
   ].join("\n\n");
 
   return { signature, riskSpot, intervention };
 }
 
-export function generateFullReport(profile: ProfileInput): FullReport {
+export function generateFullReport(profile: ProfileInput, variant?: { seed?: string; runIndex?: number }): FullReport {
   const { raw, level } = profile;
+  const seed = variant?.seed ?? "viora";
+  const runIndex = variant?.runIndex ?? 0;
 
   const extendedSignature = [
     `Tvoje skóre ukazuje profil s tempom rozhodovania na úrovni ${level.speed}, analytickým spracovaním na úrovni ${level.processing} a prístupom k neistote na úrovni ${level.risk}.`,
     `V oblasti záťaže je tvoja stabilita na úrovni ${level.pressure} a potreba riadenia procesu na úrovni ${level.control}. V praxi to znamená, že tvoj výkon je najlepší, keď máš jasný cieľ, explicitné priority a krátke cykly spätnej väzby.`,
-    "Tento podpis je konzistentný: neurčuje jednu „správnu“ stratégiu, ale rámec, v ktorom robíš kvalitnejšie rozhodnutia opakovane.",
+    `${pickCopy("full.signature.tail", seed, runIndex)} ${pickCopy("full.plan.intro", seed, runIndex)}`,
   ].join("\n\n");
 
   const dimensionMap = {
@@ -151,6 +156,7 @@ export function generateFullReport(profile: ProfileInput): FullReport {
   };
 
   const tensions: string[] = [
+    pickCopy("full.tension.intro", seed, runIndex),
     level.speed === "high" && level.processing === "high"
       ? "Rýchlosť a analytika sa môžu dostať do konfliktu: chceš konať hneď, ale zároveň mať dôkladné zdôvodnenie. Riešenie je dvojfázový režim: 5 minút analýza, potom exekučné rozhodnutie."
       : "Tempo a hĺbka analýzy sú relatívne vyvážené. Napätie vzniká hlavne vtedy, keď nie je vopred definovaná dôležitosť rozhodnutia.",
