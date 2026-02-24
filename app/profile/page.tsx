@@ -27,12 +27,102 @@ const tuningOptions = [
   "Rozumná kontrola",
 ] as const;
 
-const changePlanByFocus: Record<(typeof tuningOptions)[number], string> = {
-  "Rýchlejšie rozhodovanie": "Na 7 dní zaveď pravidlo 2 fáz: 5 minút rozhodovacie kritériá, potom finálne rozhodnutie do 10 minút. Po rozhodnutí skontroluj iba 1 kritický bod.",
-  "Menej stresu v neistote": "Pred náročným rozhodnutím spusti 2-min reset (dych + pomenovanie rizika) a nastav jednu hranicu prijateľnej straty. Znížiš tlak bez straty tempa.",
-  "Menej zacyklenia na detailoch": "Používaj limit 3 kritériá + deadline. Keď ich naplníš, rozhodni a nerob druhé kolo porovnávania, iba krátky 24h checkpoint.",
-  "Lepšie zvládanie tlaku": "V vysokom tlaku rozbi rozhodnutie na 3 kroky: priorita, bezpečný ďalší krok, stručný zápis dôvodu. Tým stabilizuješ kvalitu pod záťažou.",
-  "Rozumná kontrola": "Rozdeľ vstupy na „musím riadiť“ vs. „stačí monitorovať“. Každý deň skontroluj len 2 riadené premenné a ostatné nechaj na týždenný review.",
+type ChangePlan = {
+  title: string;
+  horizonDays: number;
+  checklist: { day: number; items: string[] }[];
+  triggers: string[];
+  metrics: string[];
+  pitfalls: string[];
+  fallback: string[];
+};
+
+const changePlanByFocus: Record<(typeof tuningOptions)[number], ChangePlan> = {
+  "Rýchlejšie rozhodovanie": {
+    title: "Rýchlejšie rozhodovanie",
+    horizonDays: 7,
+    checklist: [
+      { day: 1, items: ["Pred rozhodnutím napíš 2 možnosti + 1 riziko pre každú (max 60s).", "Nastav limit na finálne rozhodnutie: 10 minút."] },
+      { day: 2, items: ["Použi pravidlo ‚jedna kontrola navyše‘: over iba 1 kritický údaj.", "Po rozhodnutí zapíš dôvod do jednej vety."] },
+      { day: 3, items: ["Pri 3 bežných rozhodnutiach použi rovnaký rámec 2 možnosti/1 riziko.", "Sleduj, kde si prekročil časový limit."] },
+      { day: 4, items: ["Odstráň jedno zbytočné porovnanie variantov.", "Neotváraj rozhodnutie znova bez novej informácie."] },
+      { day: 5, items: ["Pred dôležitým krokom skontroluj iba dopad + reversibilitu.", "Ak je krok reverzibilný, rozhodni okamžite."] },
+      { day: 6, items: ["Sprav review 5 rozhodnutí: ktoré boli zbytočne odložené.", "Zvoľ jedno pravidlo, ktoré budeš držať aj budúci týždeň."] },
+      { day: 7, items: ["Urob 15-min retrospektívu: rýchlosť vs. kvalita.", "Nastav cieľ na ďalších 7 dní."] },
+    ],
+    triggers: ["Keď stráviš nad rozhodnutím viac než 8 minút.", "Keď porovnávaš viac ako 2 varianty bez nových dát."],
+    metrics: ["Počet odložených rozhodnutí za deň (cieľ ≤ 2).", "Medián času od zadania po rozhodnutie."],
+    pitfalls: ["Návrat do opakovaného porovnávania.", "Prehnaná kontrola detailov pri reverzibilných krokoch."],
+    fallback: ["Ak sa zasekneš: vyber najbezpečnejší ďalší krok na 24h.", "Ak chýbajú dáta: nastav 15-min timebox a rozhodni s poznámkou ‚revízia zajtra‘."],
+  },
+  "Menej stresu v neistote": {
+    title: "Menej stresu v neistote",
+    horizonDays: 7,
+    checklist: [
+      { day: 1, items: ["Pred rizikovým rozhodnutím 3 nádychy 4-4-6.", "Pomenúj najhorší realistický scenár v 1 vete."] },
+      { day: 2, items: ["Definuj hranicu straty (čas/peniaze/energia).", "Nastav podmienku ‚stop‘ ešte pred rozhodnutím."] },
+      { day: 3, items: ["V neistote zapisuj iba to, čo vieš vs. čo nevieš.", "Nerob tretí scenár, stačia 2 varianty." ] },
+      { day: 4, items: ["Pri pocite tlaku sa spýtaj: ‚čo je najmenší ďalší krok?‘", "Urob tento krok do 5 minút." ] },
+      { day: 5, items: ["Po rozhodnutí vyhodnoť stres 1–10.", "Pridaj krátky reset po náročnej voľbe (2 min)." ] },
+      { day: 6, items: ["Zmapuj situácie, ktoré ťa spúšťajú.", "Ku každej spúšťačke dopíš jednu odpoveď." ] },
+      { day: 7, items: ["Review: ktoré rozhodnutia mali nižší stres a prečo.", "Zafixuj 2 techniky, ktoré fungovali." ] },
+    ],
+    triggers: ["Keď nevieš predikovať výsledok.", "Keď cítiš telesné napätie pred rozhodnutím."],
+    metrics: ["Priemerný stres pred rozhodnutím (1–10).", "Počet rozhodnutí dokončených bez odkladu."],
+    pitfalls: ["Snaha mať 100 % istotu pred krokom.", "Vyhýbanie sa rozhodnutiu pod zámienkou ‚ešte si to premyslím‘."],
+    fallback: ["Použi iba 1 bezpečný experiment na 24 hodín.", "Ak stres stúpne nad 8/10, rozhodnutie rozdrob na 2 menšie kroky."],
+  },
+  "Menej zacyklenia na detailoch": {
+    title: "Menej zacyklenia na detailoch",
+    horizonDays: 7,
+    checklist: [
+      { day: 1, items: ["Urči 3 kritériá kvality pre dnešné rozhodnutia.", "Všetko mimo týchto 3 kritérií ignoruj." ] },
+      { day: 2, items: ["Pri každom rozhodnutí zastav analýzu po 2 zdrojoch.", "Nevytváraj ďalší zoznam bez nového faktu." ] },
+      { day: 3, items: ["Nastav timebox 12 minút na prípravu.", "Po timeboxe musí nasledovať voľba variantu." ] },
+      { day: 4, items: ["Použi pravidlo 80/20: ktorý detail mení výsledok najviac?", "Zvyšok nechaj na následnú kontrolu." ] },
+      { day: 5, items: ["Pred uzavretím rozhodnutia skontroluj iba 1 rizikový detail.", "Neprepisuj rozhodnutie celé." ] },
+      { day: 6, items: ["Review 3 situácií, kde si šiel príliš do hĺbky.", "Napíš, čo bolo v skutočnosti dôležité." ] },
+      { day: 7, items: ["Nastav osobný limit: max 2 kolá revízie.", "Po 2. kole rozhodnutie uzavri." ] },
+    ],
+    triggers: ["Keď pridávaš tretí a ďalší detail bez dopadu na výsledok.", "Keď sa vraciaš k už uzavretému rozhodnutiu."],
+    metrics: ["Počet rozhodnutí s >2 revíziami (cieľ 0).", "Čas strávený na príprave vs. exekúcii."],
+    pitfalls: ["Perfekcionizmus maskovaný ako kvalita.", "Dlhé porovnávanie podobných variantov."],
+    fallback: ["Použi otázku: ‚Ktorý 1 detail zmení výsledok?‘", "Ak nevieš, uzavri rozhodnutie a nastav revíziu o 24h."],
+  },
+  "Lepšie zvládanie tlaku": {
+    title: "Lepšie zvládanie tlaku",
+    horizonDays: 7,
+    checklist: [
+      { day: 1, items: ["Pred začiatkom dňa urč top 1 prioritu.", "Každý tlakový vstup porovnaj voči top priorite." ] },
+      { day: 2, items: ["Pri eskalácii použi sekvenciu: stop → dýchaj → rozhodni ďalší krok.", "Zapíš krok do 1 vety." ] },
+      { day: 3, items: ["Rozdeľ náročné rozhodnutie na 3 menšie kroky.", "Každý krok ukonči mini-checkpointom." ] },
+      { day: 4, items: ["V strese eliminuj multitasking počas rozhodovania.", "Udrž len jednu aktívnu rozhodovaciu úlohu." ] },
+      { day: 5, items: ["Po tlakovom bloku sprav 3-min reset.", "Zhodnoť kvalitu rozhodnutia 1–5." ] },
+      { day: 6, items: ["Identifikuj 2 opakované tlaky v týždni.", "Ku každému priprav vopred odpoveď." ] },
+      { day: 7, items: ["Týždenné review: čo fungovalo pod tlakom.", "Zafixuj 1 rutinu pre ďalší týždeň." ] },
+    ],
+    triggers: ["Keď prídu 3+ požiadavky naraz.", "Keď cítiš, že rozhoduješ v časovej panike."],
+    metrics: ["Počet impulzívnych rozhodnutí pod tlakom.", "Subjektívna kvalita rozhodnutí v záťaži (1–5)."],
+    pitfalls: ["Skok na prvý variant bez kontroly dopadu.", "Chaotická zmena priorít počas dňa."],
+    fallback: ["Ak tlak rastie: rozhodni iba najbližší bezpečný krok.", "Ak sa nevieš sústrediť: 2-min reset + návrat k top priorite."],
+  },
+  "Rozumná kontrola": {
+    title: "Rozumná kontrola",
+    horizonDays: 7,
+    checklist: [
+      { day: 1, items: ["Rozdeľ úlohy na ‚riadiť‘ vs ‚monitorovať‘.", "Vyber len 2 oblasti, ktoré budeš riadiť denne." ] },
+      { day: 2, items: ["Vytvor 1 jednoduchý checklist rozhodnutia (max 4 body).", "Používaj ten istý checklist celý deň." ] },
+      { day: 3, items: ["Pri každom rozhodnutí urči, čo deleguješ.", "Nepreberaj späť delegované body bez dôvodu." ] },
+      { day: 4, items: ["Skontroluj len metriky s dopadom na cieľ.", "Odstráň 1 kontrolu, ktorá nič nemení." ] },
+      { day: 5, items: ["Nastav čas na kontrolu: 2 pevné okná denne.", "Mimo okien nekontroluj detaily." ] },
+      { day: 6, items: ["Review: kde kontrola pomohla vs. brzdila.", "Zachovaj len funkčné pravidlá." ] },
+      { day: 7, items: ["Zhrň 3 pravidlá rozumnej kontroly.", "Prenes ich do ďalšieho týždňa." ] },
+    ],
+    triggers: ["Keď kontroluješ tie isté veci opakovane.", "Keď delegované úlohy začneš mikromanažovať."],
+    metrics: ["Počet zbytočných kontrol za deň.", "Podiel delegovaných krokov dokončených bez zásahu."],
+    pitfalls: ["Mikromanažment pri nízkom riziku.", "Kontrola bez prepojenia na cieľ."],
+    fallback: ["Vráť sa k pravidlu 2 riadené premenné denne.", "Ak cítiš chaos, obnov checklist 4 bodov a pokračuj."],
+  },
 };
 
 const plannedUpgradeItems = [
@@ -52,6 +142,7 @@ export default function ProfilePage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showComingSoon, setShowComingSoon] = useState(false);
   const [purchaseIntent, setPurchaseIntent] = useState<PurchaseIntent | null>(null);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
@@ -89,6 +180,39 @@ export default function ProfilePage() {
   const attempt = state?.base.attempt ?? 0;
   const mode: ProfileMode = state ? deriveProfileMode(state) : "quiz";
   const premiumStep = state?.ui.premiumStep ?? 1;
+  const premiumStepLabels: Record<1 | 2 | 3 | 4, string> = {
+    1: "Premium Zone",
+    2: "Upgrade",
+    3: "Supplement",
+    4: "Tuning",
+  };
+
+  const includedPremiumModules = useMemo(() => (state?.unlocks.included ?? []).filter((slug) => modulesBySlug[slug]), [state?.unlocks.included]);
+  const activePremiumMiniModuleSlug = includedPremiumModules[premiumMiniModuleIndex] ?? null;
+  const activePremiumMiniModule = activePremiumMiniModuleSlug ? modulesBySlug[activePremiumMiniModuleSlug] : null;
+  const activePremiumMiniQuestion = activePremiumMiniModule ? activePremiumMiniModule.questions[premiumMiniQuestionIndex] : null;
+
+  const buildMiniReportText = (slug: ModuleSlug) => {
+    const moduleMeta = modulesBySlug[slug];
+    const answersForModule = premiumMiniAnswers[slug] ?? {};
+    const answeredCount = Object.keys(answersForModule).length;
+    if (answeredCount > 0) {
+      const scores = scoreModuleAnswers(slug, answersForModule);
+      const addon = generateModuleAddon(slug, scored, scores);
+      return `${addon.title}
+
+${addon.insight}
+
+Rizikové miesto: ${addon.riskSpot}
+
+Odporúčaný krok: ${addon.action}`;
+    }
+    return `${moduleMeta.title}
+
+Mini report bol vytvorený z tvojho základného profilu (${scored.level.speed}/${scored.level.processing}/${scored.level.risk}) a vybraného kontextu.
+
+Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
+  };
 
   const includedPremiumModules = useMemo(() => (state?.unlocks.included ?? []).filter((slug) => modulesBySlug[slug]), [state?.unlocks.included]);
   const activePremiumMiniModuleSlug = includedPremiumModules[premiumMiniModuleIndex] ?? null;
@@ -600,12 +724,17 @@ Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontex
 
         {mode === "premium_steps" && (
           <section className="space-y-6">
-            <div className="flex flex-wrap gap-2">
-              {[1, 2, 3, 4].map((s) => (
-                <button key={s} type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
-                  Krok {s}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {[1, 2, 3, 4].map((s) => (
+                  <button key={s} type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
+                    {premiumStepLabels[s as 1 | 2 | 3 | 4]}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setShowComingSoon(true)} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                Coming soon
+              </button>
             </div>
 
             {miniFlowNotice && <p className="text-sm text-amber-700">{miniFlowNotice}</p>}
@@ -679,6 +808,8 @@ Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontex
               </article>
             )}
 
+            {premiumStep === 3 && renderAddonArea(true)}
+
             {premiumStep === 4 && synthesis && (
               <section className="space-y-6">
                 <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -731,7 +862,6 @@ Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontex
                   </div>
                 </article>
 
-                {renderAddonArea(true)}
 
                 <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-semibold">Tuning / model úprav</h2>
@@ -750,15 +880,51 @@ Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontex
                 <article ref={changePlanRef} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-semibold">Návrh zmeny</h2>
                   {(state.tuning.choices ?? []).length === 0 ? (
-                    <p className="mt-3 text-sm text-slate-600">Vyber aspoň jeden fokus v tuningu a zobrazí sa konkrétny plán úpravy.</p>
+                    <p className="mt-3 text-sm text-slate-600">Vyber aspoň jeden fokus v tuningu a zobrazí sa konkrétny 7-dňový checklist.</p>
                   ) : (
-                    <div className="mt-3 space-y-4">
-                      {(state.tuning.choices ?? []).map((focus) => (
-                        <div key={focus} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-sm font-semibold text-slate-900">{focus}</p>
-                          <p className="mt-1 text-sm text-slate-700">{changePlanByFocus[focus as (typeof tuningOptions)[number]]}</p>
-                        </div>
-                      ))}
+                    <div className="mt-4 space-y-5">
+                      {(state.tuning.choices ?? []).map((focus) => {
+                        const plan = changePlanByFocus[focus as (typeof tuningOptions)[number]];
+                        return (
+                          <div key={focus} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <h3 className="text-base font-semibold text-slate-900">{plan.title}</h3>
+                            <p className="mt-1 text-sm text-slate-600">Horizont: {plan.horizonDays} dní</p>
+                            <div className="mt-3 space-y-3">
+                              {plan.checklist.map((dayBlock) => (
+                                <details key={dayBlock.day} className="rounded-lg border border-slate-200 bg-white p-3" open={dayBlock.day === 1}>
+                                  <summary className="cursor-pointer text-sm font-medium text-slate-800">Deň {dayBlock.day}</summary>
+                                  <div className="mt-2 space-y-2">
+                                    {dayBlock.items.map((item) => (
+                                      <label key={item} className="flex items-start gap-2 text-sm text-slate-700">
+                                        <input type="checkbox" className="mt-1" />
+                                        <span>{item}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </details>
+                              ))}
+                            </div>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Spúšťače</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.triggers.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Meranie</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.metrics.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Pozor na</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.pitfalls.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Fallback</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.fallback.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </article>
@@ -769,6 +935,25 @@ Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontex
 
         <div className="mt-8"><Link href="/" className="inline-flex items-center rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700">Späť na úvod</Link></div>
       </div>
+
+      {showComingSoon && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-6">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl md:p-8">
+            <h3 className="text-xl font-semibold">Chystáme pre vás</h3>
+            <ul className="mt-4 list-inside list-disc space-y-2 text-sm text-slate-700">
+              <li>Osobný coach-management režim (malý doplatok)</li>
+              <li>Automatické týždenné plány + checkpointy</li>
+              <li>AI revízia rozhodnutí a spätná väzba</li>
+              <li>Notifikácie, tracking a mikro-návyky</li>
+            </ul>
+            <p className="mt-4 text-xs text-slate-500">Pripravujeme. Dostupnosť a rozsah sa môžu meniť.</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowComingSoon(false)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Daj mi vedieť</button>
+              <button type="button" onClick={() => setShowComingSoon(false)} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Rozumiem</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPaymentModal && purchaseIntent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-6">
