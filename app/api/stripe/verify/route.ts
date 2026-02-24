@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true, kind, moduleSlug, name });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || "Stripe verify failed" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Stripe verify failed" }, { status: 500 });
   }
 }

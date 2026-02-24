@@ -378,6 +378,9 @@ export default function ProfilePage() {
             <h1 className="text-2xl font-semibold">Načítavame tvoj profil…</h1>
           </div>
         </div>
+      </main>
+    );
+  }
 
       </main>
     );
@@ -454,14 +457,7 @@ export default function ProfilePage() {
                 </button>
               ))}
             </div>
-          ) }
-        </div>
 
-        {billingMessage && (
-          <div className="rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm">
-            {billingMessage}
-          </div>
-        )}
 
             {premiumStep === 1 && (
               <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
