@@ -214,6 +214,33 @@ Mini report bol vytvorený z tvojho základného profilu (${scored.level.speed}/
 Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
   };
 
+  const includedPremiumModules = useMemo(() => (state?.unlocks.included ?? []).filter((slug) => modulesBySlug[slug]), [state?.unlocks.included]);
+  const activePremiumMiniModuleSlug = includedPremiumModules[premiumMiniModuleIndex] ?? null;
+  const activePremiumMiniModule = activePremiumMiniModuleSlug ? modulesBySlug[activePremiumMiniModuleSlug] : null;
+  const activePremiumMiniQuestion = activePremiumMiniModule ? activePremiumMiniModule.questions[premiumMiniQuestionIndex] : null;
+
+  const buildMiniReportText = (slug: ModuleSlug) => {
+    const moduleMeta = modulesBySlug[slug];
+    const answersForModule = premiumMiniAnswers[slug] ?? {};
+    const answeredCount = Object.keys(answersForModule).length;
+    if (answeredCount > 0) {
+      const scores = scoreModuleAnswers(slug, answersForModule);
+      const addon = generateModuleAddon(slug, scored, scores);
+      return `${addon.title}
+
+${addon.insight}
+
+Rizikové miesto: ${addon.riskSpot}
+
+Odporúčaný krok: ${addon.action}`;
+    }
+    return `${moduleMeta.title}
+
+Mini report bol vytvorený z tvojho základného profilu (${scored.level.speed}/${scored.level.processing}/${scored.level.risk}) a vybraného kontextu.
+
+Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
+  };
+
   const selectedVariants = useMemo(() => {
     const resolved = resolveVariantsFromIds(state?.base.selectedQuestionIds ?? {});
     if (resolved) return resolved;
