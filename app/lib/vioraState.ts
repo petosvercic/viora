@@ -1,7 +1,7 @@
+import { questions, type OptionLabel } from "./decisionModel";
 import { modulesBySlug, type ModuleSlug } from "./modules";
-import type { OptionLabel } from "./decisionModel";
 
-export type ProfileMode = "quiz" | "results" | "premiumHub" | "tuning" | "deep";
+export type ProfileMode = "quiz" | "freeResult" | "premiumResult" | "tuning" | "changeTool" | "premiumHub";
 
 export type VioraStateV1 = {
   version: 1;
@@ -24,6 +24,7 @@ export type VioraStateV1 = {
     choices?: string[];
   };
   ui: {
+    mode?: ProfileMode;
     lastMode?: ProfileMode;
     lastSelectedModule?: ModuleSlug;
   };
@@ -40,6 +41,11 @@ const LS_CONSENT = "viora_consent";
 const LS_INCLUDED_MODULES = "viora_included_modules";
 const LS_TUNING_CHOICES = "viora_tuning_choices";
 const LS_TUNING_DONE = "viora_tuning_done";
+
+const PREMIUM_SCENES: ProfileMode[] = ["premiumResult", "tuning", "changeTool", "premiumHub"];
+
+const isProfileMode = (value: unknown): value is ProfileMode =>
+  value === "quiz" || value === "freeResult" || value === "premiumResult" || value === "tuning" || value === "changeTool" || value === "premiumHub";
 
 const isModuleSlug = (value: unknown): value is ModuleSlug => typeof value === "string" && value in modulesBySlug;
 
@@ -60,9 +66,13 @@ const normalizeAnswers = (value: unknown): Record<number, OptionLabel> | undefin
   return Object.keys(next).length ? next : undefined;
 };
 
+export const getAnsweredCount = (state: VioraStateV1): number => Object.keys(state.base.answers ?? {}).length;
+
+export const isQuizComplete = (state: VioraStateV1): boolean => getAnsweredCount(state) >= questions.length;
+
 export const sanitizeVioraState = (value: Partial<VioraStateV1> | null | undefined): VioraStateV1 => {
   const raw = value ?? {};
-  const tuningChoices = Array.isArray(raw.tuning?.choices) ? raw.tuning.choices.filter((item): item is string => typeof item === "string") : [];
+  const tuningChoices = Array.isArray(raw.tuning?.choices) ? raw.tuning.choices.filter((item): item is string => typeof item === "string").slice(0, 2) : [];
   const tuningDone = raw.tuning?.done === true || tuningChoices.length > 0;
 
   return {
@@ -83,13 +93,41 @@ export const sanitizeVioraState = (value: Partial<VioraStateV1> | null | undefin
     },
     tuning: {
       done: tuningDone,
-      choices: tuningDone ? tuningChoices.slice(0, 2) : [],
+      choices: tuningDone ? tuningChoices : [],
     },
     ui: {
-      lastMode: raw.ui?.lastMode,
-      lastSelectedModule: isModuleSlug(raw.ui?.lastSelectedModule) ? raw.ui?.lastSelectedModule : undefined,
+      mode: isProfileMode(raw.ui?.mode) ? raw.ui.mode : undefined,
+      lastMode: isProfileMode(raw.ui?.lastMode) ? raw.ui.lastMode : undefined,
+      lastSelectedModule: isModuleSlug(raw.ui?.lastSelectedModule) ? raw.ui.lastSelectedModule : undefined,
     },
   };
+};
+
+export const deriveProfileMode = (state: VioraStateV1): ProfileMode => {
+  if (!isQuizComplete(state)) return "quiz";
+  if (!state.unlocks.full) return "freeResult";
+  if (!state.tuning.done) return "premiumResult";
+
+  const preferred = state.ui.mode;
+  if (preferred && PREMIUM_SCENES.includes(preferred)) return preferred;
+  return "premiumHub";
+};
+
+export const canTransitionMode = (state: VioraStateV1, target: ProfileMode): boolean => {
+  const current = deriveProfileMode(state);
+  if (target === current) return true;
+  if (target === "quiz") return !isQuizComplete(state);
+  if (target === "freeResult") return isQuizComplete(state) && !state.unlocks.full;
+  if (!state.unlocks.full) return false;
+  if (target === "premiumResult") return true;
+  if (target === "tuning") return true;
+  if (target === "changeTool" || target === "premiumHub") return state.tuning.done === true;
+  return false;
+};
+
+export const withMode = (state: VioraStateV1, target: ProfileMode): VioraStateV1 => {
+  if (!canTransitionMode(state, target)) return state;
+  return patchVioraState(state, { ui: { ...state.ui, mode: target, lastMode: target } });
 };
 
 export const loadVioraState = (): VioraStateV1 => {
@@ -109,8 +147,8 @@ export const saveVioraState = (state: VioraStateV1) => {
   localStorage.setItem(LS_STATE, JSON.stringify(sanitizeVioraState(state)));
 };
 
-export const patchVioraState = (prev: VioraStateV1, patch: Partial<VioraStateV1>): VioraStateV1 => {
-  return sanitizeVioraState({
+export const patchVioraState = (prev: VioraStateV1, patch: Partial<VioraStateV1>): VioraStateV1 =>
+  sanitizeVioraState({
     ...prev,
     ...patch,
     identity: { ...prev.identity, ...patch.identity },
@@ -119,15 +157,6 @@ export const patchVioraState = (prev: VioraStateV1, patch: Partial<VioraStateV1>
     tuning: { ...prev.tuning, ...patch.tuning },
     ui: { ...prev.ui, ...patch.ui },
   });
-};
-
-export const deriveProfileMode = (state: VioraStateV1): ProfileMode => {
-  const hasBaseResults = Boolean(state.base.answers && Object.keys(state.base.answers).length > 0);
-  if (!hasBaseResults) return "quiz";
-  if (!state.unlocks.full) return "results";
-  if (state.tuning.done) return "deep";
-  return state.unlocks.included && state.unlocks.included.length > 0 ? "tuning" : "premiumHub";
-};
 
 const migrateLegacyState = (): VioraStateV1 => {
   let answers: Record<number, OptionLabel> | undefined;
