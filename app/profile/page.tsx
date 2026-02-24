@@ -382,6 +382,10 @@ export default function ProfilePage() {
     );
   }
 
+      </main>
+    );
+  }
+
   if (mode === "quiz" || isAnalyzing) {
     return (
       <main className="relative min-h-screen">
