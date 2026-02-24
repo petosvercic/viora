@@ -16,9 +16,9 @@ export type VioraStateV1 = {
     attempt?: number;
     selectedQuestionIds?: SelectedQuestionIds;
   };
-  unlocks: { full?: boolean; addons?: ModuleSlug[]; included?: ModuleSlug[] };
+  unlocks: { full?: boolean; addons?: ModuleSlug[]; included?: ModuleSlug[]; miniReports?: Partial<Record<ModuleSlug, string>> };
   tuning: { done?: boolean; choices?: string[] };
-  ui: { lastMode?: ProfileMode; lastSelectedModule?: ModuleSlug; premiumStep?: 1 | 2 | 3 | 4 };
+  ui: { lastMode?: ProfileMode; lastSelectedModule?: ModuleSlug; premiumStep?: 1 | 2 | 3 | 4 | 5 };
 };
 
 const LS_STATE = "viora_state_v1";
@@ -52,6 +52,18 @@ const normMods = (value: unknown, limit?: number): ModuleSlug[] => {
   if (!Array.isArray(value)) return [];
   const dedupe = Array.from(new Set(value.filter(isModuleSlug)));
   return typeof limit === "number" ? dedupe.slice(0, limit) : dedupe;
+};
+
+
+const normMiniReports = (value: unknown): Partial<Record<ModuleSlug, string>> => {
+  if (!value || typeof value !== "object") return {};
+  const out: Partial<Record<ModuleSlug, string>> = {};
+  for (const [key, rawVal] of Object.entries(value as Record<string, unknown>)) {
+    if (!isModuleSlug(key)) continue;
+    if (typeof rawVal !== "string") continue;
+    out[key] = rawVal;
+  }
+  return out;
 };
 
 const normIds = (value: unknown): SelectedQuestionIds => {
@@ -110,6 +122,7 @@ export const sanitizeVioraState = (rawValue: Partial<VioraStateV1> | null | unde
       full: raw.unlocks?.full === true,
       addons: normMods(raw.unlocks?.addons),
       included: normMods(raw.unlocks?.included, 2),
+      miniReports: normMiniReports(raw.unlocks?.miniReports),
     },
     tuning: {
       done: raw.tuning?.done === true,
@@ -118,7 +131,7 @@ export const sanitizeVioraState = (rawValue: Partial<VioraStateV1> | null | unde
     ui: {
       lastMode: raw.ui?.lastMode,
       lastSelectedModule: isModuleSlug(raw.ui?.lastSelectedModule) ? raw.ui.lastSelectedModule : undefined,
-      premiumStep: raw.ui?.premiumStep === 1 || raw.ui?.premiumStep === 2 || raw.ui?.premiumStep === 3 || raw.ui?.premiumStep === 4 ? raw.ui.premiumStep : 1,
+      premiumStep: raw.ui?.premiumStep === 1 || raw.ui?.premiumStep === 2 || raw.ui?.premiumStep === 3 || raw.ui?.premiumStep === 4 || raw.ui?.premiumStep === 5 ? raw.ui.premiumStep : 1,
     },
   };
 };
@@ -186,6 +199,7 @@ const migrateLegacyState = (): VioraStateV1 => {
       full: localStorage.getItem(legacy.full) === "true",
       addons: (() => { try { return normMods(JSON.parse(localStorage.getItem(legacy.addons) || "[]")); } catch { return []; } })(),
       included: (() => { try { return normMods(JSON.parse(localStorage.getItem(legacy.included) || "[]"), 2); } catch { return []; } })(),
+      miniReports: {},
     },
     tuning: {
       done: localStorage.getItem(legacy.tuningDone) === "true",

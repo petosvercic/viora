@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as TelemetryEvent;
 
-    if (!body || typeof body !== "object" || typeof (body as any).type !== "string") {
+    if (!body || typeof body !== "object" || !("type" in body) || typeof body.type !== "string") {
       return NextResponse.json({ ok: false }, { status: 400 });
     }
 
