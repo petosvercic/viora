@@ -34,6 +34,17 @@ const LS_NAME = "viora_name";
 const LS_CONSENT = "viora_consent";
 const LS_PENDING_PURCHASE = "viora_pending_purchase";
 const LS_PREMIUM_PRICE_WARNING = "viora_premium_price_warning";
+const LS_INCLUDED_MODULES = "viora_included_modules";
+const LS_TUNING_CHOICES = "viora_tuning_choices";
+const LS_TUNING_DONE = "viora_tuning_done";
+
+const tuningOptions = [
+  "Rýchlejšie rozhodovanie",
+  "Menej stresu v neistote",
+  "Menej zacyklenia na detailoch",
+  "Lepšie zvládanie tlaku",
+  "Rozumná kontrola",
+] as const;
 
 export default function ProfilePage() {
   const [step, setStep] = useState(0);
@@ -43,6 +54,9 @@ export default function ProfilePage() {
 
   const [unlocked, setUnlocked] = useState(false);
   const [unlockedAddons, setUnlockedAddons] = useState<ModuleSlug[]>([]);
+  const [includedModules, setIncludedModules] = useState<ModuleSlug[]>([]);
+  const [tuningChoices, setTuningChoices] = useState<string[]>([]);
+  const [tuningDone, setTuningDone] = useState(false);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [isPaying, setIsPaying] = useState(false);
 
@@ -75,6 +89,13 @@ export default function ProfilePage() {
 
   const hasCompletedModule = (slug: ModuleSlug) => Boolean(completedAddons[slug]);
   const isAddonUnlocked = (slug: ModuleSlug) => unlockedAddons.includes(slug);
+  const isIncludedModule = (slug: ModuleSlug) => includedModules.includes(slug);
+  const isModuleAccessible = (slug: ModuleSlug) => {
+    const moduleDef = modulesBySlug[slug];
+    if (moduleDef.isFree) return true;
+    if (!unlocked) return isAddonUnlocked(slug);
+    return isIncludedModule(slug) || isAddonUnlocked(slug);
+  };
 
   const addonPriceLabel = unlocked ? "0,99 €" : "2,99 €";
   const greetingName = name.trim();
@@ -104,6 +125,25 @@ export default function ProfilePage() {
           setUnlockedAddons(filtered);
         }
       }
+
+      const rawIncludedModules = localStorage.getItem(LS_INCLUDED_MODULES);
+      if (rawIncludedModules) {
+        const parsed = JSON.parse(rawIncludedModules);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((item): item is ModuleSlug => item in modulesBySlug).slice(0, 2);
+          setIncludedModules(filtered);
+        }
+      }
+
+      const rawTuningChoices = localStorage.getItem(LS_TUNING_CHOICES);
+      if (rawTuningChoices) {
+        const parsed = JSON.parse(rawTuningChoices);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((item): item is string => typeof item === "string");
+          setTuningChoices(filtered);
+        }
+      }
+      setTuningDone(localStorage.getItem(LS_TUNING_DONE) === "true");
 
       const storedEmail = localStorage.getItem(LS_EMAIL);
       const storedName = localStorage.getItem(LS_NAME);
@@ -203,6 +243,19 @@ export default function ProfilePage() {
     if (phase === "result") persistBaseState(answers);
   }, [phase, answers]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_INCLUDED_MODULES, JSON.stringify(includedModules));
+    } catch {}
+  }, [includedModules]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_TUNING_CHOICES, JSON.stringify(tuningChoices));
+      localStorage.setItem(LS_TUNING_DONE, tuningDone ? "true" : "false");
+    } catch {}
+  }, [tuningChoices, tuningDone]);
+
   const openPaymentModal = (intent: PurchaseIntent) => {
     setPurchaseIntent(intent);
     setShowPaymentModal(true);
@@ -288,19 +341,19 @@ export default function ProfilePage() {
   };
 
   const startModule = (slug: ModuleSlug) => {
-    const module = modulesBySlug[slug];
+    const moduleDef = modulesBySlug[slug];
 
-    if (!module.isFree && !unlocked && !isAddonUnlocked(slug)) {
-      setModuleNotice("Tento modul je dostupný po odomknutí detailnej analýzy.");
+    if (!moduleDef.isFree && !unlocked && !isAddonUnlocked(slug)) {
+      setModuleNotice("Tento modul je Plus. Môžeš ho odomknúť samostatne za 2,99 € alebo najprv odomknúť celý profil.");
       setPendingModulePurchase(slug);
       unlockRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       unlockRef.current?.focus();
       return;
     }
 
-    if (!module.isFree && !isAddonUnlocked(slug)) {
+    if (!moduleDef.isFree && unlocked && !isModuleAccessible(slug)) {
       setPendingModulePurchase(slug);
-      setModuleNotice("Tento modul je Plus. Odomkni ho a pokračuj v otázkach.");
+      setModuleNotice("Tento modul ešte nie je odomknutý. Môžeš ho pridať za 0,99 € alebo zvoliť medzi modulmi v cene.");
       return;
     }
 
@@ -331,6 +384,27 @@ export default function ProfilePage() {
       setModuleStep((prev) => prev + 1);
       setModuleTransition("idle");
     }, 360);
+  };
+
+  const toggleIncludedModule = (slug: ModuleSlug) => {
+    if (!unlocked) return;
+    const moduleDef = modulesBySlug[slug];
+    if (moduleDef.isFree || isAddonUnlocked(slug)) return;
+
+    setIncludedModules((prev) => {
+      if (prev.includes(slug)) return prev.filter((item) => item !== slug);
+      if (prev.length >= 2) return prev;
+      return [...prev, slug];
+    });
+  };
+
+  const saveTuningAndContinue = () => {
+    setTuningDone(true);
+  };
+
+  const skipTuning = () => {
+    setTuningChoices([]);
+    setTuningDone(true);
   };
 
   const resetModule = () => {
@@ -387,8 +461,85 @@ export default function ProfilePage() {
 
           <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:p-8">
             <h2 className="text-xl font-semibold">Detailná analýza (Full Report)</h2>
-            <div className="relative mt-5 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-5 md:p-6">
-              <div className={unlocked ? "" : "pointer-events-none select-none blur-[3px]"}>
+
+            {!unlocked && (
+              <>
+                <div className="relative mt-5 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-5 md:p-6">
+                  <div className="pointer-events-none select-none blur-[3px]">
+                    <div className="space-y-7">
+                      <section>
+                        <h3 className="text-base font-semibold">Rozšírený rozhodovací podpis</h3>
+                        <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-700 md:text-base">{fullReport.extendedSignature}</p>
+                      </section>
+                    </div>
+                  </div>
+                  <div className="pointer-events-none absolute inset-0 bg-white/30" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-white via-white/90 to-transparent" />
+                </div>
+
+                <div className="mt-6 flex justify-center">
+                  <button
+                    ref={unlockRef}
+                    type="button"
+                    onClick={() => openPaymentModal({ kind: "full" })}
+                    disabled={isPaying}
+                    className="inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-80"
+                  >
+                    Chcem hlbší profil
+                  </button>
+                </div>
+              </>
+            )}
+
+            {unlocked && !tuningDone && (
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <h3 className="text-lg font-semibold">Čo chceš zlepšiť?</h3>
+                <p className="mt-2 text-sm text-slate-600">Vyber 1–2 oblasti fokusu, podľa ktorých ti zobrazíme hĺbkovú analýzu.</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {tuningOptions.map((option) => {
+                    const selected = tuningChoices.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          setTuningChoices((prev) => {
+                            if (prev.includes(option)) return prev.filter((item) => item !== option);
+                            if (prev.length >= 2) return prev;
+                            return [...prev, option];
+                          });
+                        }}
+                        className={`rounded-xl border p-4 text-left text-sm transition ${selected ? "border-slate-900 bg-white" : "border-slate-200 bg-white hover:border-slate-400"}`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={saveTuningAndContinue}
+                    className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+                  >
+                    Pokračovať
+                  </button>
+                  <button
+                    type="button"
+                    onClick={skipTuning}
+                    className="inline-flex items-center rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-white"
+                  >
+                    Preskočiť a zobraziť analýzu
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {unlocked && tuningDone && (
+              <div className="mt-5 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-5 md:p-6">
+                {tuningChoices.length > 0 && (
+                  <p className="mb-4 text-sm text-slate-600">Tvoj fokus: {tuningChoices.join(", ")}</p>
+                )}
                 <div className="space-y-7">
                   <section>
                     <h3 className="text-base font-semibold">Rozšírený rozhodovací podpis</h3>
@@ -420,29 +571,73 @@ export default function ProfilePage() {
                   </section>
                 </div>
               </div>
-
-              {!unlocked && (
-                <>
-                  <div className="pointer-events-none absolute inset-0 bg-white/30" />
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-white via-white/90 to-transparent" />
-                </>
-              )}
-            </div>
-
-            <div className="mt-6 flex justify-center">
-              <button
-                ref={unlockRef}
-                type="button"
-                onClick={() => (!unlocked ? openPaymentModal({ kind: "full" }) : undefined)}
-                disabled={unlocked || isPaying}
-                className={`inline-flex items-center rounded-full px-6 py-3 text-sm font-medium transition ${
-                  unlocked ? "cursor-default bg-emerald-100 text-emerald-700" : "bg-slate-900 text-white hover:bg-slate-800"
-                } disabled:opacity-80`}
-              >
-                {unlocked ? "Hlbší profil odomknutý" : "Chcem hlbší profil"}
-              </button>
-            </div>
+            )}
           </article>
+
+          {unlocked && (
+            <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:p-8">
+              <h2 className="text-xl font-semibold">Premium centrum</h2>
+              <p className="mt-2 text-slate-600">Vyber si 2 oblasti, ktoré máš v cene (môžeš aj neskôr).</p>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                {modules.filter((module) => !module.isFree).map((module) => {
+                  const included = isIncludedModule(module.slug);
+                  const purchased = isAddonUnlocked(module.slug);
+                  const availableForTopUp = unlocked && !included && !purchased;
+
+                  return (
+                    <div key={`hub-${module.slug}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <h3 className="font-medium text-slate-900">{module.title}</h3>
+                        {included ? (
+                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">V cene</span>
+                        ) : purchased ? (
+                          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700">Odomknuté</span>
+                        ) : (
+                          <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700">Plus</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-600">{module.description}</p>
+                      {availableForTopUp && (
+                        <button
+                          type="button"
+                          onClick={() => openPaymentModal({ kind: "addon", moduleSlug: module.slug })}
+                          className="mt-3 inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-white"
+                        >
+                          Pridať za 0,99 €
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => setIncludedModules([])}
+                  className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
+                >
+                  {includedModules.length < 2 ? "Vybrať teraz" : "Zmeniť výber"}
+                </button>
+                <p className="mt-2 text-sm text-slate-500">Vybraté v cene: {includedModules.length}/2</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {modules.filter((module) => !module.isFree).map((module) => {
+                    const selected = includedModules.includes(module.slug);
+                    return (
+                      <button
+                        key={`pick-${module.slug}`}
+                        type="button"
+                        onClick={() => toggleIncludedModule(module.slug)}
+                        disabled={!selected && includedModules.length >= 2}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700 hover:bg-white"} disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        {module.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </article>
+          )}
 
           <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:p-8">
             <h2 className="text-xl font-semibold">Spresniť analýzu podľa kontextu</h2>
@@ -460,8 +655,8 @@ export default function ProfilePage() {
                     <h3 className="font-medium text-slate-900">{module.title}</h3>
                     <div className="flex items-center gap-2">
                       {hasCompletedModule(module.slug) && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">Hotovo</span>}
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${module.isFree ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}`}>
-                        {module.isFree ? "Skús zdarma" : "Plus"}
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${module.isFree ? "bg-emerald-100 text-emerald-700" : isIncludedModule(module.slug) ? "bg-emerald-100 text-emerald-700" : isAddonUnlocked(module.slug) ? "bg-sky-100 text-sky-700" : "bg-slate-200 text-slate-700"}`}>
+                        {module.isFree ? "Skús zdarma" : isIncludedModule(module.slug) ? "V cene" : isAddonUnlocked(module.slug) ? "Odomknuté" : "Plus"}
                       </span>
                     </div>
                   </div>
@@ -472,7 +667,7 @@ export default function ProfilePage() {
 
             {moduleNotice && <p className="mt-4 text-sm text-amber-700">{moduleNotice}</p>}
 
-            {pendingModulePurchase && !isAddonUnlocked(pendingModulePurchase) && (
+            {pendingModulePurchase && !isModuleAccessible(pendingModulePurchase) && (
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
@@ -480,7 +675,7 @@ export default function ProfilePage() {
                   disabled={isPaying}
                   className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-70"
                 >
-                  Odomknúť tento modul ({addonPriceLabel})
+                  {unlocked ? "Pridať za 0,99 €" : "Odomknúť za 2,99 €"}
                 </button>
                 <span className="text-sm text-slate-500">{modulesBySlug[pendingModulePurchase].title}</span>
               </div>
