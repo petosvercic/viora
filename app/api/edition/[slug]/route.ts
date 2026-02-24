@@ -16,11 +16,12 @@ export async function GET(_req: Request, ctx: Ctx) {
     const raw = await fs.readFile(editionPath, "utf8");
     const json = JSON.parse(raw);
     return NextResponse.json(json, { status: 200 });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errCode = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
     const msg =
-      e?.code === "ENOENT"
+      errCode === "ENOENT"
         ? `Edition not found: ${slug}`
-        : `Edition read/parse failed: ${e?.message ?? "unknown error"}`;
+        : `Edition read/parse failed: ${e instanceof Error ? e.message : "unknown error"}`;
 
     return NextResponse.json({ error: msg, slug }, { status: 404 });
   }

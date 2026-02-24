@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getStripe } from "../../../lib/stripe";
 
 type CheckoutBody = {
-  kind?: "full" | "addon";
+  kind?: "full" | "addon" | "mini_report";
   moduleSlug?: string;
   email?: string;
   name?: string;
@@ -18,11 +18,11 @@ export async function POST(req: Request) {
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     const isPremium = Boolean(body?.isPremium);
 
-    if (kind !== "full" && kind !== "addon") {
+    if (kind !== "full" && kind !== "addon" && kind !== "mini_report") {
       return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
     }
 
-    if (kind === "addon" && !moduleSlug) {
+    if ((kind === "addon" || kind === "mini_report") && !moduleSlug) {
       return NextResponse.json({ error: "Missing moduleSlug" }, { status: 400 });
     }
 
@@ -31,6 +31,7 @@ export async function POST(req: Request) {
     const priceFull = process.env.STRIPE_PRICE_FULL || "price_1T45iMP8pde7A7bVFbmhYpRa";
     const priceAddonBase = process.env.STRIPE_PRICE_ADDON_BASE || "price_1T45k9P8pde7A7bViFY3i64o";
     const priceAddonPremium = process.env.STRIPE_PRICE_ADDON_PREMIUM;
+    const priceMiniReport = process.env.STRIPE_PRICE_MINI_REPORT || process.env.STRIPE_PRICE_ADDON_PREMIUM || "price_1T45k9P8pde7A7bViFY3i64o";
 
     let price = priceFull;
     let usedPremiumFallback = false;
@@ -42,6 +43,10 @@ export async function POST(req: Request) {
         price = priceAddonBase;
         if (isPremium && !priceAddonPremium) usedPremiumFallback = true;
       }
+    }
+
+    if (kind === "mini_report") {
+      price = priceMiniReport;
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || req.headers.get("origin") || "http://localhost:3000";
@@ -61,7 +66,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ url: session.url, usedPremiumFallback });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Stripe checkout failed" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Stripe checkout failed" }, { status: 500 });
   }
 }
