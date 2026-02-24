@@ -14,7 +14,7 @@ import { createNextRunState, deriveProfileMode, ensureBaseRunConfig, getAnswered
 
 type TransitionPhase = "idle" | "transitioning";
 type AddonResult = { title: string; insight: string; riskSpot: string; action: string };
-type PurchaseIntent = { kind: "full" | "addon"; moduleSlug?: ModuleSlug };
+type PurchaseIntent = { kind: "full" | "addon" | "mini_report"; moduleSlug?: ModuleSlug };
 
 const LS_PREMIUM_PRICE_WARNING = "viora_premium_price_warning";
 const LS_PENDING_PURCHASE = "viora_pending_purchase";
@@ -26,6 +26,21 @@ const tuningOptions = [
   "Lepšie zvládanie tlaku",
   "Rozumná kontrola",
 ] as const;
+
+const changePlanByFocus: Record<(typeof tuningOptions)[number], string> = {
+  "Rýchlejšie rozhodovanie": "Na 7 dní zaveď pravidlo 2 fáz: 5 minút rozhodovacie kritériá, potom finálne rozhodnutie do 10 minút. Po rozhodnutí skontroluj iba 1 kritický bod.",
+  "Menej stresu v neistote": "Pred náročným rozhodnutím spusti 2-min reset (dych + pomenovanie rizika) a nastav jednu hranicu prijateľnej straty. Znížiš tlak bez straty tempa.",
+  "Menej zacyklenia na detailoch": "Používaj limit 3 kritériá + deadline. Keď ich naplníš, rozhodni a nerob druhé kolo porovnávania, iba krátky 24h checkpoint.",
+  "Lepšie zvládanie tlaku": "V vysokom tlaku rozbi rozhodnutie na 3 kroky: priorita, bezpečný ďalší krok, stručný zápis dôvodu. Tým stabilizuješ kvalitu pod záťažou.",
+  "Rozumná kontrola": "Rozdeľ vstupy na „musím riadiť“ vs. „stačí monitorovať“. Každý deň skontroluj len 2 riadené premenné a ostatné nechaj na týždenný review.",
+};
+
+const plannedUpgradeItems = [
+  "Adaptívne mini-reporty podľa reálneho kontextu dňa.",
+  "Pokročilé porovnanie dvoch rozhodovacích štýlov vedľa seba.",
+  "Dlhší 30-dňový plán návykov s checkpointmi.",
+  "Export výstupu do tímového one-pageru.",
+];
 
 export default function ProfilePage() {
   const [state, setState] = useState<VioraStateV1 | null>(null);
@@ -58,6 +73,7 @@ export default function ProfilePage() {
   const [miniFlowNotice, setMiniFlowNotice] = useState<string | null>(null);
 
   const unlockRef = useRef<HTMLButtonElement | null>(null);
+  const changePlanRef = useRef<HTMLElement | null>(null);
 
   const patchState = (patch: Partial<VioraStateV1>) => {
     setState((prev) => {
@@ -78,6 +94,28 @@ export default function ProfilePage() {
   const activePremiumMiniModuleSlug = includedPremiumModules[premiumMiniModuleIndex] ?? null;
   const activePremiumMiniModule = activePremiumMiniModuleSlug ? modulesBySlug[activePremiumMiniModuleSlug] : null;
   const activePremiumMiniQuestion = activePremiumMiniModule ? activePremiumMiniModule.questions[premiumMiniQuestionIndex] : null;
+
+  const buildMiniReportText = (slug: ModuleSlug) => {
+    const moduleMeta = modulesBySlug[slug];
+    const answersForModule = premiumMiniAnswers[slug] ?? {};
+    const answeredCount = Object.keys(answersForModule).length;
+    if (answeredCount > 0) {
+      const scores = scoreModuleAnswers(slug, answersForModule);
+      const addon = generateModuleAddon(slug, scored, scores);
+      return `${addon.title}
+
+${addon.insight}
+
+Rizikové miesto: ${addon.riskSpot}
+
+Odporúčaný krok: ${addon.action}`;
+    }
+    return `${moduleMeta.title}
+
+Mini report bol vytvorený z tvojho základného profilu (${scored.level.speed}/${scored.level.processing}/${scored.level.risk}) a vybraného kontextu.
+
+Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
+  };
 
   const selectedVariants = useMemo(() => {
     const resolved = resolveVariantsFromIds(state?.base.selectedQuestionIds ?? {});
@@ -195,11 +233,21 @@ export default function ProfilePage() {
             saveVioraState(next);
             return next;
           }
+          if (data?.ok && data?.kind === "mini_report" && typeof data?.moduleSlug === "string" && data.moduleSlug in modulesBySlug) {
+            const slug = data.moduleSlug as ModuleSlug;
+            const reportText = buildMiniReportText(slug);
+            const next = patchVioraState(prev, {
+              unlocks: { ...prev.unlocks, miniReports: { ...(prev.unlocks.miniReports ?? {}), [slug]: reportText } },
+            });
+            saveVioraState(next);
+            return next;
+          }
           return prev;
         });
 
         if (data?.ok && data?.kind === "full") setBillingMessage("Platba prebehla úspešne. Hlbší profil je odomknutý.");
         else if (data?.ok && data?.kind === "addon") setBillingMessage("Platba prebehla úspešne. Modul je odomknutý.");
+        else if (data?.ok && data?.kind === "mini_report") setBillingMessage("Platba prebehla úspešne. Mini report je pripravený.");
         else setBillingMessage("Overenie platby sa nepodarilo. Skús obnoviť stránku.");
       } catch {
         setBillingMessage("Overenie platby zlyhalo. Skús to prosím znova.");
@@ -298,7 +346,7 @@ export default function ProfilePage() {
           moduleSlug: purchaseIntent.moduleSlug,
           email,
           name: state.identity.name?.trim() ?? "",
-          isPremium: purchaseIntent.kind === "addon" ? state.unlocks.full === true : false,
+          isPremium: purchaseIntent.kind !== "full" ? state.unlocks.full === true : false,
         }),
       });
       const data = await res.json();
@@ -309,6 +357,17 @@ export default function ProfilePage() {
       setBillingMessage("Nepodarilo sa spustiť platbu. Skús to prosím znova.");
     } finally {
       setIsPaying(false);
+    }
+  };
+
+  const onTuningToggle = (focus: (typeof tuningOptions)[number]) => {
+    if (!state) return;
+    const list = state.tuning.choices ?? [];
+    const selected = list.includes(focus);
+    const next = selected ? list.filter((x) => x !== focus) : list.length >= 2 ? list : [...list, focus];
+    patchState({ tuning: { ...state.tuning, choices: next, done: next.length > 0 } });
+    if (next.length > 0) {
+      window.setTimeout(() => changePlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     }
   };
 
@@ -526,6 +585,16 @@ export default function ProfilePage() {
               </div>
             </article>
             {renderAddonArea(false)}
+            <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold">Čoskoro / plánované upgrady</h2>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">Plánované</span>
+              </div>
+              <ul className="mt-4 list-inside list-disc space-y-1 text-sm text-slate-700">
+                {plannedUpgradeItems.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+              <p className="mt-3 text-xs text-slate-500">Rozsah a poradie týchto rozšírení sa môže meniť podľa spätnej väzby používateľov.</p>
+            </article>
           </section>
         )}
 
@@ -625,6 +694,43 @@ export default function ProfilePage() {
                   <h3 className="mt-4 text-base font-semibold">Ako do toho zapadajú tvoje kontexty</h3>
                   <p className="mt-2 text-slate-700">{synthesis.contexts}</p>
                 </article>
+                <article className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-semibold">Čoskoro / plánované</h3>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">Plánované</span>
+                  </div>
+                  <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-slate-700">
+                    {plannedUpgradeItems.slice(0, 3).map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-xl font-semibold">Mini reporty (0.99)</h2>
+                  <p className="mt-2 text-slate-600">Samostatné mini výsledky pre jednotlivé kontexty. Neovplyvňujú Komplexnú analýzu, sú to doplnkové výstupy.</p>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    {modules.map((m) => {
+                      const unlockedText = state.unlocks.miniReports?.[m.slug];
+                      return (
+                        <div key={m.slug} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="font-medium text-slate-900">{m.title}</h3>
+                            <span className="rounded-full bg-slate-200 px-2 py-1 text-xs text-slate-700">0,99 €</span>
+                          </div>
+                          <p className="mt-1 text-sm text-slate-600">{m.description}</p>
+                          {!unlockedText ? (
+                            <button type="button" onClick={() => openPaymentModal({ kind: "mini_report", moduleSlug: m.slug })} className="mt-3 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Odomknúť mini report (0.99)</button>
+                          ) : (
+                            <div className="mt-3 space-y-3">
+                              <button type="button" className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zobraziť mini report</button>
+                              <div className="whitespace-pre-line rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">{unlockedText}</div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+
                 {renderAddonArea(true)}
 
                 <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -633,13 +739,28 @@ export default function ProfilePage() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {tuningOptions.map((o) => {
                       const sel = (state.tuning.choices ?? []).includes(o);
-                      return <button key={o} type="button" onClick={() => {
-                        const list = state.tuning.choices ?? [];
-                        const next = sel ? list.filter((x) => x !== o) : list.length >= 2 ? list : [...list, o];
-                        patchState({ tuning: { ...state.tuning, choices: next, done: next.length > 0 } });
-                      }} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button>;
+                      return <button key={o} type="button" onClick={() => onTuningToggle(o)} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button>;
                     })}
                   </div>
+                  <div className="mt-5 flex gap-3">
+                    <button type="button" onClick={() => changePlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Uložiť úpravy</button>
+                  </div>
+                </article>
+
+                <article ref={changePlanRef} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-xl font-semibold">Návrh zmeny</h2>
+                  {(state.tuning.choices ?? []).length === 0 ? (
+                    <p className="mt-3 text-sm text-slate-600">Vyber aspoň jeden fokus v tuningu a zobrazí sa konkrétny plán úpravy.</p>
+                  ) : (
+                    <div className="mt-3 space-y-4">
+                      {(state.tuning.choices ?? []).map((focus) => (
+                        <div key={focus} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-sm font-semibold text-slate-900">{focus}</p>
+                          <p className="mt-1 text-sm text-slate-700">{changePlanByFocus[focus as (typeof tuningOptions)[number]]}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </article>
               </section>
             )}
@@ -666,7 +787,7 @@ export default function ProfilePage() {
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" onClick={() => setShowPaymentModal(false)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zavrieť</button>
-              <button type="button" onClick={() => void startCheckout()} disabled={isPaying} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">{purchaseIntent.kind === "full" ? "Pokračovať na platbu 4,99 €" : `Pokračovať na platbu ${state.unlocks.full ? "0,99 €" : "2,99 €"}`}</button>
+              <button type="button" onClick={() => void startCheckout()} disabled={isPaying} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">{purchaseIntent.kind === "full" ? "Pokračovať na platbu 4,99 €" : purchaseIntent.kind === "mini_report" ? "Pokračovať na platbu 0,99 €" : `Pokračovať na platbu ${state.unlocks.full ? "0,99 €" : "2,99 €"}`}</button>
             </div>
           </div>
         </div>

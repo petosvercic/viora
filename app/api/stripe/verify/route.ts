@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false });
     }
 
-    const kind = session.metadata?.kind === "addon" ? "addon" : session.metadata?.kind === "full" ? "full" : null;
+    const kind = session.metadata?.kind === "addon" ? "addon" : session.metadata?.kind === "full" ? "full" : session.metadata?.kind === "mini_report" ? "mini_report" : null;
     const moduleSlug = typeof session.metadata?.moduleSlug === "string" ? session.metadata.moduleSlug : undefined;
     const name = typeof session.metadata?.name === "string" ? session.metadata.name : undefined;
 
