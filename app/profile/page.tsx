@@ -150,6 +150,17 @@ const focusTooltips: Record<(typeof tuningOptions)[number], string> = {
   "Rozumná kontrola": "Nastaví hranice kontroly bez rigidity.",
 };
 
+
+function HoverTip({ text, children }: { text: string; children: import("react").ReactNode }) {
+  return (
+    <span className="group relative inline-flex">
+      {children}
+      <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-40 mt-1 w-56 -translate-x-1/2 rounded-md bg-slate-900 px-2 py-1 text-[11px] text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
 export default function ProfilePage() {
   const [state, setState] = useState<VioraStateV1 | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -787,9 +798,11 @@ ${url}`;
                         ? "Komplexná analýza + mini-reporty ako samostatný výsledok."
                         : "Checklist zmien pre vybrané focusy na 7 dní.";
                   return (
-                    <button key={s} title={tip} type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4 | 5)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
-                      {premiumStepLabels[s as 1 | 2 | 3 | 4 | 5]}
-                    </button>
+                    <HoverTip key={s} text={tip}>
+                      <button type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4 | 5)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
+                        {premiumStepLabels[s as 1 | 2 | 3 | 4 | 5]}
+                      </button>
+                    </HoverTip>
                   );
                 })}
               </div>
@@ -834,7 +847,7 @@ ${url}`;
                     );
                   })}
                 </div>
-                <div className="mt-5"><button type="button" onClick={openPremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Pokračovať</button></div>
+                <div className="mt-5"><HoverTip text="Prejdeš na mini doplnenie otázkami."><button type="button" onClick={openPremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Pokračovať</button></HoverTip></div>
               </article>
             )}
 
@@ -864,7 +877,7 @@ ${url}`;
                 ) : null}
 
                 <div className="mt-5 flex flex-wrap gap-3">
-                  <button type="button" onClick={completePremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Vygenerovať analýzu</button>
+                  <HoverTip text="Analýza sa spraví z dostupných dát."><button type="button" onClick={completePremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Preskočiť mini otázky</button></HoverTip>
                   <button type="button" onClick={() => goToPremiumStep(2)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Späť na výber oblastí</button>
                 </div>
               </article>
@@ -916,7 +929,7 @@ ${url}`;
 
                           {status === "locked" && (
                             <div className="mt-3 flex items-center gap-2">
-                              <button title="Odomkne rýchly mini výsledok pre tento modul." type="button" onClick={() => openPaymentModal({ kind: "mini_report", moduleSlug: m.slug })} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Odomknúť mini report (0.99)</button>
+                              <HoverTip text="Odomkne rýchly mini výsledok pre tento modul."><button type="button" onClick={() => openPaymentModal({ kind: "mini_report", moduleSlug: m.slug })} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Odomknúť mini report (0.99)</button></HoverTip>
                             </div>
                           )}
 
@@ -965,7 +978,7 @@ Spúšťač: ${templ.trigger}` } } });
                               ) : (
                                 <div className="whitespace-pre-line">{saved}</div>
                               )}
-                              <button type="button" onClick={() => { setActiveMiniReportModule(m.slug); setMiniReportStatusByModule((prev) => ({ ...prev, [m.slug]: "collecting" })); setMiniReportQuestionByModule((prev)=>({ ...prev, [m.slug]: 0 })); }} className="mt-3 rounded-full border border-slate-300 px-4 py-2 text-sm">Upraviť odpovede</button>
+                              <HoverTip text="Ukáže tvoj mini výsledok pre tento modul."><button type="button" onClick={() => { setActiveMiniReportModule(m.slug); setMiniReportStatusByModule((prev) => ({ ...prev, [m.slug]: "collecting" })); setMiniReportQuestionByModule((prev)=>({ ...prev, [m.slug]: 0 })); }} className="mt-3 rounded-full border border-slate-300 px-4 py-2 text-sm">Zobraziť mini report</button></HoverTip>
                             </div>
                           )}
                         </div>
@@ -992,7 +1005,7 @@ Spúšťač: ${templ.trigger}` } } });
                     })}
                   </div>
                   <div className="mt-5 flex gap-3">
-                    <button type="button" onClick={() => { showToast("Hotovo. Tu je tvoj 7-dňový plán."); changePlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Uložiť úpravy</button>
+                    <HoverTip text="Zobrazí tvoj mikro-krokový plán pre vybrané focusy."><button type="button" onClick={() => { showToast("Hotovo. Tu je tvoj 7-dňový plán."); changePlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Uložiť úpravy</button></HoverTip>
                   </div>
                 </article>
 
@@ -1023,6 +1036,24 @@ Spúšťač: ${templ.trigger}` } } });
                                   </div>
                                 </details>
                               ))}
+                            </div>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Spúšťače</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.triggers.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Meranie</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.metrics.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Pozor na</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.pitfalls.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Fallback</p>
+                                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">{plan.fallback.map((item) => <li key={item}>{item}</li>)}</ul>
+                              </div>
                             </div>
                           </div>
                         );
