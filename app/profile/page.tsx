@@ -150,37 +150,6 @@ const focusTooltips: Record<(typeof tuningOptions)[number], string> = {
   "Rozumná kontrola": "Nastaví hranice kontroly bez rigidity.",
 };
 
-function Tooltip({ text, label = "Viac info" }: { text: string; label?: string }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <span className="relative inline-flex items-center">
-      <button
-        type="button"
-        aria-label={label}
-        aria-describedby={open ? id : undefined}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] leading-none text-slate-600"
-      >
-        ⓘ
-      </button>
-      {open && (
-        <span id={id} role="tooltip" className="absolute left-1/2 top-7 z-40 w-56 -translate-x-1/2 rounded-md bg-slate-900 px-2 py-1 text-[11px] text-white shadow-lg">
-          {text}
-        </span>
-      )}
-    </span>
-  );
-}
-
 export default function ProfilePage() {
   const [state, setState] = useState<VioraStateV1 | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -778,13 +747,13 @@ ${url}`;
 
         {mode === "free_results" && (
           <section className="space-y-6">
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Tvoj rozhodovací podpis</h2><div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.signature}</div><p className="mt-4 text-sm text-slate-600">Zdieľaj svoj podpis. Najlepšie funguje v chate ako 1 veta.</p><div className="mt-3 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void shareWithLink(`Môj rozhodovací podpis: ${freeReport.signature.split("\n")[0]}`, "Viora podpis")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Zdieľať profil</button><Tooltip text="Skopíruje krátky text + link. Bez citlivých dát." /><button type="button" onClick={() => void shareWithLink(`Viora karta: ${freeReport.signature.split("\n")[0]}`, "Viora karta")} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať ako kartu</button></div><p className="mt-2 text-xs text-slate-500">Pripravujeme odmeny za odporúčania ✨ <span className="inline-flex"><Tooltip text="Čoskoro: mini-report zdarma pri zdieľaní." /></span></p></article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Tvoj rozhodovací podpis</h2><div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.signature}</div><p className="mt-4 text-sm text-slate-600">Zdieľaj svoj podpis. Najlepšie funguje v chate ako 1 veta.</p><div className="mt-3 flex flex-wrap items-center gap-2"><button title="Skopíruje krátky text + link. Bez citlivých dát." type="button" onClick={() => void shareWithLink(`Môj rozhodovací podpis: ${freeReport.signature.split("\n")[0]}`, "Viora podpis")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Zdieľať profil</button><button title="Skopíruje krátky text + link. Bez citlivých dát." type="button" onClick={() => void shareWithLink(`Viora karta: ${freeReport.signature.split("\n")[0]}`, "Viora karta")} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať ako kartu</button></div><p className="mt-2 text-xs text-slate-500">Pripravujeme odmeny za odporúčania ✨</p></article>
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Rizikové miesto</h2><div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.riskSpot}</div></article>
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Jeden optimalizačný zásah</h2>
               <div className="mt-4 whitespace-pre-line text-slate-700">{freeReport.intervention}</div>
               <div className="mt-5 flex flex-wrap gap-3">
-                <button type="button" onClick={() => void shareWithLink(`Môj rozhodovací podpis: ${freeReport.signature.split("\n")[0]}`, "Viora podpis")} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať podpis</button><Tooltip text="Skopíruje krátky podpis + link. Bez osobných dát." />
+                <button title="Skopíruje krátky podpis + link. Bez osobných dát." type="button" onClick={() => void shareWithLink(`Môj rozhodovací podpis: ${freeReport.signature.split("\n")[0]}`, "Viora podpis")} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zdieľať podpis</button>
                 <button ref={unlockRef} type="button" onClick={() => openPaymentModal({ kind: "full" })} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Chcem hlbší profil</button>
                 <button type="button" onClick={onTryAgain} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Spustiť znova kvíz</button>
               </div>
@@ -818,21 +787,15 @@ ${url}`;
                         ? "Komplexná analýza + mini-reporty ako samostatný výsledok."
                         : "Checklist zmien pre vybrané focusy na 7 dní.";
                   return (
-                    <div key={s} className="inline-flex items-center">
-                      <button type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4 | 5)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
-                        {premiumStepLabels[s as 1 | 2 | 3 | 4 | 5]}
-                      </button>
-                      <Tooltip text={tip} />
-                    </div>
+                    <button key={s} title={tip} type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4 | 5)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
+                      {premiumStepLabels[s as 1 | 2 | 3 | 4 | 5]}
+                    </button>
                   );
                 })}
               </div>
-              <div className="inline-flex items-center">
-                <button type="button" onClick={() => setShowComingSoon(true)} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
-                  Coming soon
-                </button>
-                <Tooltip text="Ochutnávka plánovaných upgradeov a budúcich “magic” funkcií." />
-              </div>
+              <button title="Ochutnávka plánovaných upgradeov a budúcich magic funkcií." type="button" onClick={() => setShowComingSoon(true)} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                Pripravujeme
+              </button>
             </div>
 
             {miniFlowNotice && <p className="text-sm text-amber-700">{miniFlowNotice}</p>}
@@ -927,8 +890,7 @@ ${url}`;
                   <p className="mt-2 text-sm text-slate-700"><span className="font-medium">Insight:</span> {synthesis.summary[0]}</p>
                   <p className="mt-1 text-sm text-slate-700"><span className="font-medium">Tip:</span> {synthesis.situations[0]}</p>
                   <div className="mt-3 flex items-center gap-2">
-                    <button type="button" onClick={() => void shareWithLink(`Highlight: ${synthesis.summary[0]} Tip: ${synthesis.situations[0]}`, "Viora highlight")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Zdieľať highlight</button>
-                    <Tooltip text="Len highlight, nie celý report." />
+                    <button title="Len highlight, nie celý report." type="button" onClick={() => void shareWithLink(`Highlight: ${synthesis.summary[0]} Tip: ${synthesis.situations[0]}`, "Viora highlight")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Zdieľať highlight</button>
                   </div>
                 </article>
 
@@ -948,14 +910,13 @@ ${url}`;
                         <div id={`mini-card-${m.slug}`} key={m.slug} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                           <div className="flex items-center justify-between gap-2">
                             <h3 className="font-medium text-slate-900">{m.title}</h3>
-                            <span className="rounded-full bg-slate-200 px-2 py-1 text-xs text-slate-700">0,99 €</span><Tooltip text="0.99 = samostatný mini výsledok hneď teraz (neovplyvní analýzu)." />
+                            <span title="0.99 = samostatný mini výsledok hneď teraz (neovplyvní analýzu)." className="rounded-full bg-slate-200 px-2 py-1 text-xs text-slate-700">0,99 €</span>
                           </div>
                           <p className="mt-1 text-sm text-slate-600">{m.description}</p>
 
                           {status === "locked" && (
                             <div className="mt-3 flex items-center gap-2">
-                              <button type="button" onClick={() => openPaymentModal({ kind: "mini_report", moduleSlug: m.slug })} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Odomknúť mini report (0.99)</button>
-                              <Tooltip text="Odomkne rýchly mini výsledok pre tento modul." />
+                              <button title="Odomkne rýchly mini výsledok pre tento modul." type="button" onClick={() => openPaymentModal({ kind: "mini_report", moduleSlug: m.slug })} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">Odomknúť mini report (0.99)</button>
                             </div>
                           )}
 
@@ -993,7 +954,7 @@ Spúšťač: ${templ.trigger}` } } });
 
                           {status === "ready" && (result || saved) && (
                             <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
-                              <div className="mb-2 flex items-center gap-2"><span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Už máš</span><Tooltip text="Tento mini report je už odomknutý." /></div>
+                              <div className="mb-2 flex items-center gap-2"><span title="Tento mini report je už odomknutý." className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Už máš</span></div>
                               {result ? (
                                 <div className="space-y-2">
                                   <p><span className="font-medium">Insight:</span> {result.insight}</p>
@@ -1027,7 +988,7 @@ Spúšťač: ${templ.trigger}` } } });
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {tuningOptions.map((o) => {
                       const sel = (state.tuning.choices ?? []).includes(o);
-                      return <div key={o} className="flex items-start"><button type="button" onClick={() => { showToast("Zapisujem fokus…"); onTuningToggle(o); showToast("Presúvam ťa na plán zmeny…"); }} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button><Tooltip text="Klikni a dostaneš 7-dňový checklist pre tento smer zmeny." /></div>;
+                      return <button key={o} title={focusTooltips[o]} type="button" onClick={() => { showToast("Zapisujem fokus…"); onTuningToggle(o); showToast("Presúvam ťa na plán zmeny…"); }} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button>;
                     })}
                   </div>
                   <div className="mt-5 flex gap-3">
@@ -1074,7 +1035,7 @@ Spúšťač: ${templ.trigger}` } } });
           </section>
         )}
 
-        <div className="mt-8 flex items-center gap-2"><Link href="/" className="inline-flex items-center rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700">Späť na úvod</Link><Tooltip text="Vráti ťa na úvod. Výsledky zostanú uložené." /></div>
+        <div className="mt-8"><Link href="/" title="Vráti ťa na úvod. Výsledky zostanú uložené." className="inline-flex items-center rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700">Späť na úvod</Link></div>
       </div>
 
       {showComingSoon && (
