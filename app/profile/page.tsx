@@ -132,6 +132,16 @@ const plannedUpgradeItems = [
   "Export výstupu do tímového one-pageru.",
 ];
 
+const buildMiniReportTextFromBase = (slug: ModuleSlug, baseAnswers: Record<number, OptionLabel> | undefined) => {
+  const moduleMeta = modulesBySlug[slug];
+  const baseScore = scoreAnswers(baseAnswers ?? {});
+  return `${moduleMeta.title}
+
+Mini report bol vytvorený z tvojho základného profilu (${baseScore.level.speed}/${baseScore.level.processing}/${baseScore.level.risk}) a vybraného kontextu.
+
+Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
+};
+
 export default function ProfilePage() {
   const [state, setState] = useState<VioraStateV1 | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -191,55 +201,6 @@ export default function ProfilePage() {
   const activePremiumMiniModuleSlug = includedPremiumModules[premiumMiniModuleIndex] ?? null;
   const activePremiumMiniModule = activePremiumMiniModuleSlug ? modulesBySlug[activePremiumMiniModuleSlug] : null;
   const activePremiumMiniQuestion = activePremiumMiniModule ? activePremiumMiniModule.questions[premiumMiniQuestionIndex] : null;
-
-  const buildMiniReportText = (slug: ModuleSlug) => {
-    const moduleMeta = modulesBySlug[slug];
-    const answersForModule = premiumMiniAnswers[slug] ?? {};
-    const answeredCount = Object.keys(answersForModule).length;
-    if (answeredCount > 0) {
-      const scores = scoreModuleAnswers(slug, answersForModule);
-      const addon = generateModuleAddon(slug, scored, scores);
-      return `${addon.title}
-
-${addon.insight}
-
-Rizikové miesto: ${addon.riskSpot}
-
-Odporúčaný krok: ${addon.action}`;
-    }
-    return `${moduleMeta.title}
-
-Mini report bol vytvorený z tvojho základného profilu (${scored.level.speed}/${scored.level.processing}/${scored.level.risk}) a vybraného kontextu.
-
-Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
-  };
-
-  const includedPremiumModules = useMemo(() => (state?.unlocks.included ?? []).filter((slug) => modulesBySlug[slug]), [state?.unlocks.included]);
-  const activePremiumMiniModuleSlug = includedPremiumModules[premiumMiniModuleIndex] ?? null;
-  const activePremiumMiniModule = activePremiumMiniModuleSlug ? modulesBySlug[activePremiumMiniModuleSlug] : null;
-  const activePremiumMiniQuestion = activePremiumMiniModule ? activePremiumMiniModule.questions[premiumMiniQuestionIndex] : null;
-
-  const buildMiniReportText = (slug: ModuleSlug) => {
-    const moduleMeta = modulesBySlug[slug];
-    const answersForModule = premiumMiniAnswers[slug] ?? {};
-    const answeredCount = Object.keys(answersForModule).length;
-    if (answeredCount > 0) {
-      const scores = scoreModuleAnswers(slug, answersForModule);
-      const addon = generateModuleAddon(slug, scored, scores);
-      return `${addon.title}
-
-${addon.insight}
-
-Rizikové miesto: ${addon.riskSpot}
-
-Odporúčaný krok: ${addon.action}`;
-    }
-    return `${moduleMeta.title}
-
-Mini report bol vytvorený z tvojho základného profilu (${scored.level.speed}/${scored.level.processing}/${scored.level.risk}) a vybraného kontextu.
-
-Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontext na najbližších 7 dní.`;
-  };
 
   const selectedVariants = useMemo(() => {
     const resolved = resolveVariantsFromIds(state?.base.selectedQuestionIds ?? {});
@@ -359,7 +320,7 @@ Najbližší krok: nastav jeden konkrétny rozhodovací rituál pre tento kontex
           }
           if (data?.ok && data?.kind === "mini_report" && typeof data?.moduleSlug === "string" && data.moduleSlug in modulesBySlug) {
             const slug = data.moduleSlug as ModuleSlug;
-            const reportText = buildMiniReportText(slug);
+            const reportText = buildMiniReportTextFromBase(slug, prev.base.answers);
             const next = patchVioraState(prev, {
               unlocks: { ...prev.unlocks, miniReports: { ...(prev.unlocks.miniReports ?? {}), [slug]: reportText } },
             });
