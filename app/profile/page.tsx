@@ -6,6 +6,7 @@ import { canAccessModule, getModuleStatus } from "../lib/access";
 import { generateChangeTool } from "../lib/changeToolGen";
 import { scoreAnswers, type OptionLabel, questions } from "../lib/decisionModel";
 import { generateModuleAddon } from "../lib/moduleAddonGen";
+import { scoreModuleAnswers } from "../lib/moduleScoring";
 import { modules, modulesBySlug, type ModuleOptionLabel, type ModuleSlug } from "../lib/modules";
 import { resolveVariantsFromIds, selectBaseQuizVariants, slotIds } from "../lib/questionPool";
 import { generateFreeReport, generateFullReport } from "../lib/reportGen";
