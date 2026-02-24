@@ -6,7 +6,6 @@ import { canAccessModule, getModuleStatus } from "../lib/access";
 import { generateChangeTool } from "../lib/changeToolGen";
 import { scoreAnswers, type OptionLabel, questions } from "../lib/decisionModel";
 import { generateModuleAddon } from "../lib/moduleAddonGen";
-import { scoreModuleAnswers } from "../lib/moduleScoring";
 import { modules, modulesBySlug, type ModuleOptionLabel, type ModuleSlug } from "../lib/modules";
 import { generateFreeReport, generateFullReport } from "../lib/reportGen";
 import { deriveProfileMode, getAnsweredCount, isQuizComplete, loadVioraState, patchVioraState, saveVioraState, withMode, type ProfileMode, type VioraStateV1 } from "../lib/vioraState";
@@ -70,6 +69,9 @@ export default function ProfilePage() {
   const mode: ProfileMode = state ? deriveProfileMode(state) : "quiz";
   const displayMode: ProfileMode = state?.ui.mode && mode !== "quiz" && mode !== "freeResult" ? state.ui.mode : mode;
   const isPremiumUser = state?.unlocks.full === true;
+
+  const currentQuestion = questions[step];
+  const progress = ((step + 1) / questions.length) * 100;
 
   const moduleConfig = selectedModule ? modulesBySlug[selectedModule] : null;
   const activeModuleQuestion = moduleConfig ? moduleConfig.questions[moduleStep] : null;
@@ -288,7 +290,6 @@ export default function ProfilePage() {
         setModuleTransition("idle");
         return;
       }
-
       setModuleStep((prev) => prev + 1);
       setModuleTransition("idle");
     }, 360);
