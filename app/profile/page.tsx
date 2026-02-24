@@ -50,6 +50,13 @@ export default function ProfilePage() {
   const [pendingModulePurchase, setPendingModulePurchase] = useState<ModuleSlug | null>(null);
   const [completedAddons, setCompletedAddons] = useState<Partial<Record<ModuleSlug, AddonResult>>>({});
 
+  const [premiumMiniAnswers, setPremiumMiniAnswers] = useState<Partial<Record<ModuleSlug, Record<number, ModuleOptionLabel>>>>({});
+  const [premiumMiniModuleIndex, setPremiumMiniModuleIndex] = useState(0);
+  const [premiumMiniQuestionIndex, setPremiumMiniQuestionIndex] = useState(0);
+  const [premiumMiniTransition, setPremiumMiniTransition] = useState<TransitionPhase>("idle");
+  const [miniFlowDone, setMiniFlowDone] = useState(false);
+  const [miniFlowNotice, setMiniFlowNotice] = useState<string | null>(null);
+
   const unlockRef = useRef<HTMLButtonElement | null>(null);
 
   const patchState = (patch: Partial<VioraStateV1>) => {
@@ -67,6 +74,11 @@ export default function ProfilePage() {
   const mode: ProfileMode = state ? deriveProfileMode(state) : "quiz";
   const premiumStep = state?.ui.premiumStep ?? 1;
 
+  const includedPremiumModules = useMemo(() => (state?.unlocks.included ?? []).filter((slug) => modulesBySlug[slug]), [state?.unlocks.included]);
+  const activePremiumMiniModuleSlug = includedPremiumModules[premiumMiniModuleIndex] ?? null;
+  const activePremiumMiniModule = activePremiumMiniModuleSlug ? modulesBySlug[activePremiumMiniModuleSlug] : null;
+  const activePremiumMiniQuestion = activePremiumMiniModule ? activePremiumMiniModule.questions[premiumMiniQuestionIndex] : null;
+
   const selectedVariants = useMemo(() => {
     const resolved = resolveVariantsFromIds(state?.base.selectedQuestionIds ?? {});
     if (resolved) return resolved;
@@ -81,6 +93,19 @@ export default function ProfilePage() {
   const freeReport = useMemo(() => generateFreeReport(scored, { seed, runIndex: attempt }), [scored, seed, attempt]);
   const fullReport = useMemo(() => generateFullReport(scored, { seed, runIndex: attempt }), [scored, seed, attempt]);
 
+  const premiumMiniResults = useMemo(() => {
+    return includedPremiumModules
+      .map((slug) => {
+        const moduleAnswerSet = premiumMiniAnswers[slug];
+        if (!moduleAnswerSet) return null;
+        const answeredCount = Object.keys(moduleAnswerSet).length;
+        if (answeredCount === 0) return null;
+        const scores = scoreModuleAnswers(slug, moduleAnswerSet);
+        return generateModuleAddon(slug, scored, scores);
+      })
+      .filter((item): item is AddonResult => item !== null);
+  }, [includedPremiumModules, premiumMiniAnswers, scored]);
+
   const synthesis = useMemo(() => {
     if (!state) return null;
     return generateSynthesisReport({
@@ -89,10 +114,11 @@ export default function ProfilePage() {
       included: state.unlocks.included ?? [],
       purchased: state.unlocks.addons ?? [],
       tuningChoices: state.tuning.choices ?? [],
+      miniContextInsights: premiumMiniResults.map((item) => `${item.title}: ${item.insight}`),
       seed,
       attempt,
     });
-  }, [state, scored, fullReport, seed, attempt]);
+  }, [state, scored, fullReport, seed, attempt, premiumMiniResults]);
 
   const moduleConfig = selectedModule ? modulesBySlug[selectedModule] : null;
   const activeModuleQuestion = moduleConfig ? moduleConfig.questions[moduleStep] : null;
@@ -189,6 +215,65 @@ export default function ProfilePage() {
 
     void verify();
   }, []);
+
+  useEffect(() => {
+    if (!state || mode !== "premium_steps") return;
+    if (state.ui.premiumStep === 4) setMiniFlowDone(true);
+  }, [state, mode]);
+
+  const goToPremiumStep = (targetStep: 1 | 2 | 3 | 4) => {
+    if (!state) return;
+    if (targetStep === 4 && !miniFlowDone) {
+      setMiniFlowNotice("Najprv dokonči mini otázky v kroku 3 alebo ich preskoč.");
+      return;
+    }
+    setMiniFlowNotice(null);
+    patchState({ ui: { ...state.ui, premiumStep: targetStep } });
+  };
+
+  const openPremiumMiniStep = () => {
+    if (!state) return;
+    setMiniFlowNotice(null);
+    setPremiumMiniModuleIndex(0);
+    setPremiumMiniQuestionIndex(0);
+    patchState({ ui: { ...state.ui, premiumStep: 3 } });
+  };
+
+  const completePremiumMiniStep = () => {
+    if (!state) return;
+    setMiniFlowDone(true);
+    setMiniFlowNotice(null);
+    patchState({ ui: { ...state.ui, premiumStep: 4 } });
+  };
+
+  const onPremiumMiniSelect = (questionId: number, label: ModuleOptionLabel) => {
+    if (!activePremiumMiniModuleSlug || !activePremiumMiniModule) return;
+    const moduleAnswerSet = premiumMiniAnswers[activePremiumMiniModuleSlug] ?? {};
+    const nextModuleAnswers = { ...moduleAnswerSet, [questionId]: label };
+    const nextAllAnswers = { ...premiumMiniAnswers, [activePremiumMiniModuleSlug]: nextModuleAnswers };
+    setPremiumMiniAnswers(nextAllAnswers);
+    setPremiumMiniTransition("transitioning");
+
+    window.setTimeout(() => {
+      const isLastQuestion = premiumMiniQuestionIndex >= activePremiumMiniModule.questions.length - 1;
+      if (!isLastQuestion) {
+        setPremiumMiniQuestionIndex((value) => value + 1);
+        setPremiumMiniTransition("idle");
+        return;
+      }
+
+      const isLastModule = premiumMiniModuleIndex >= includedPremiumModules.length - 1;
+      if (isLastModule) {
+        setPremiumMiniTransition("idle");
+        completePremiumMiniStep();
+        return;
+      }
+
+      setPremiumMiniModuleIndex((value) => value + 1);
+      setPremiumMiniQuestionIndex(0);
+      setPremiumMiniTransition("idle");
+    }, 320);
+  };
 
   const openPaymentModal = (intent: PurchaseIntent) => {
     setPurchaseIntent(intent);
@@ -378,6 +463,9 @@ export default function ProfilePage() {
             <h1 className="text-2xl font-semibold">Načítavame tvoj profil…</h1>
           </div>
         </div>
+      </main>
+    );
+  }
 
   if (mode === "quiz" || isAnalyzing) {
     return (
@@ -445,19 +533,13 @@ export default function ProfilePage() {
           <section className="space-y-6">
             <div className="flex flex-wrap gap-2">
               {[1, 2, 3, 4].map((s) => (
-                <button key={s} type="button" onClick={() => patchState({ ui: { ...state.ui, premiumStep: s as 1 | 2 | 3 | 4 } })} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
+                <button key={s} type="button" onClick={() => goToPremiumStep(s as 1 | 2 | 3 | 4)} className={`rounded-full border px-3 py-1 text-xs ${premiumStep === s ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}>
                   Krok {s}
                 </button>
               ))}
             </div>
-          ) : null}
-        </div>
 
-        {billingMessage && (
-          <div className="rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm">
-            {billingMessage}
-          </div>
-        )}
+            {miniFlowNotice && <p className="text-sm text-amber-700">{miniFlowNotice}</p>}
 
             {premiumStep === 1 && (
               <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -493,27 +575,37 @@ export default function ProfilePage() {
                     );
                   })}
                 </div>
-                <div className="mt-5"><button type="button" onClick={() => patchState({ ui: { ...state.ui, premiumStep: 3 } })} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Pokračovať</button></div>
+                <div className="mt-5"><button type="button" onClick={openPremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Pokračovať</button></div>
               </article>
             )}
 
             {premiumStep === 3 && (
               <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-semibold">Tuning / smer zmeny</h2>
-                <p className="mt-2 text-slate-600">Vyber 1-2 focusy alebo krok preskoč.</p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  {tuningOptions.map((o) => {
-                    const sel = (state.tuning.choices ?? []).includes(o);
-                    return <button key={o} type="button" onClick={() => {
-                      const list = state.tuning.choices ?? [];
-                      const next = sel ? list.filter((x) => x !== o) : list.length >= 2 ? list : [...list, o];
-                      patchState({ tuning: { ...state.tuning, choices: next } });
-                    }} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button>;
-                  })}
-                </div>
-                <div className="mt-5 flex gap-3">
-                  <button type="button" onClick={() => patchState({ tuning: { done: true, choices: state.tuning.choices ?? [] }, ui: { ...state.ui, premiumStep: 4 } })} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Pokračovať</button>
-                  <button type="button" onClick={() => patchState({ tuning: { done: true, choices: [] }, ui: { ...state.ui, premiumStep: 4 } })} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Preskočiť</button>
+                <h2 className="text-xl font-semibold">Mini doplňujúce otázky</h2>
+                <p className="mt-2 text-slate-600">Najprv doplníme vybrané kontexty, potom pripravíme kompletnú Komplexnú analýzu.</p>
+
+                {includedPremiumModules.length === 0 ? (
+                  <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    Nemáš vybrané kontexty. Môžeš pokračovať ďalej, alebo sa vrátiť na Krok 2 a vybrať ich.
+                  </div>
+                ) : activePremiumMiniModule && activePremiumMiniQuestion && activePremiumMiniModuleSlug ? (
+                  <div className={`mt-5 rounded-xl border border-slate-200 p-5 ${premiumMiniTransition === "transitioning" ? "opacity-70" : "opacity-100"}`}>
+                    <p className="text-sm text-slate-500">{activePremiumMiniModule.title} · Otázka {premiumMiniQuestionIndex + 1} / {activePremiumMiniModule.questions.length}</p>
+                    <h3 className="mt-3 text-lg font-semibold">{activePremiumMiniQuestion.question}</h3>
+                    <div className="mt-4 grid gap-3">
+                      {activePremiumMiniQuestion.options.map((option) => (
+                        <button key={option.label} type="button" onClick={() => onPremiumMiniSelect(activePremiumMiniQuestion.id, option.label)} className="rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-slate-400">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Možnosť {option.label}</p>
+                          <p className="mt-1 text-slate-900">{option.text}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button type="button" onClick={completePremiumMiniStep} className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white">Preskočiť mini otázky</button>
+                  <button type="button" onClick={() => goToPremiumStep(2)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Späť na výber oblastí</button>
                 </div>
               </article>
             )}
@@ -534,6 +626,21 @@ export default function ProfilePage() {
                   <p className="mt-2 text-slate-700">{synthesis.contexts}</p>
                 </article>
                 {renderAddonArea(true)}
+
+                <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-xl font-semibold">Tuning / model úprav</h2>
+                  <p className="mt-2 text-slate-600">Vyber 1-2 focusy, ktoré chceš vedome upraviť v najbližších dňoch.</p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {tuningOptions.map((o) => {
+                      const sel = (state.tuning.choices ?? []).includes(o);
+                      return <button key={o} type="button" onClick={() => {
+                        const list = state.tuning.choices ?? [];
+                        const next = sel ? list.filter((x) => x !== o) : list.length >= 2 ? list : [...list, o];
+                        patchState({ tuning: { ...state.tuning, choices: next, done: next.length > 0 } });
+                      }} className={`rounded-xl border p-4 text-left ${sel ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>{o}</button>;
+                    })}
+                  </div>
+                </article>
               </section>
             )}
           </section>

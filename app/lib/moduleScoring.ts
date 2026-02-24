@@ -9,10 +9,10 @@ const toLevel = (value: number): Level => {
 };
 
 export function scoreModuleAnswers(slug: ModuleSlug, answers: Record<number, ModuleOptionLabel>) {
-  const module = modulesBySlug[slug];
-  const raw: Record<string, number> = Object.fromEntries(module.subscores.map((key) => [key, 0]));
+  const selectedModule = modulesBySlug[slug];
+  const raw: Record<string, number> = Object.fromEntries(selectedModule.subscores.map((key) => [key, 0]));
 
-  for (const question of module.questions) {
+  for (const question of selectedModule.questions) {
     const selected = answers[question.id];
     const option = question.options.find((item) => item.label === selected);
     if (!option) continue;
