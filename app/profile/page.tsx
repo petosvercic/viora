@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { canAccessModule, getModuleStatus } from "../lib/access";
 import { scoreAnswers, type OptionLabel, questions } from "../lib/decisionModel";
 import { generateModuleAddon } from "../lib/moduleAddonGen";
