@@ -35,10 +35,10 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-br from-slate-950/70 via-slate-900/55 to-slate-800/40" />
 
           <div className="relative z-10 mx-auto flex min-h-[470px] max-w-3xl flex-col items-start justify-center gap-6 px-8 py-16 text-white md:px-12">
-            <p className="text-sm uppercase tracking-[0.18em] text-white/80">Viora Decision Profile</p>
+            <p className="text-sm uppercase tracking-[0.18em] text-white/80">Viora: Personal Analysis</p>
             <h1 className="text-4xl font-semibold leading-tight md:text-5xl">Pochop, ako sa rozhoduješ.</h1>
             <p className="max-w-2xl text-base leading-relaxed text-white/90 md:text-lg">
-              Viora Decision Profile je krátky behaviorálny profil generovaný pomocou AI analýzy tvojich odpovedí.
+              Viora: Personal Analysis je krátky behaviorálny profil generovaný pomocou AI analýzy tvojich odpovedí.
               Za 2 minúty získaš jasný pohľad na svoje rozhodovacie vzorce pod tlakom a v neistote.
             </p>
             <Link
