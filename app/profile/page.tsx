@@ -18,6 +18,21 @@ type PurchaseIntent = { kind: "full" | "addon" | "mini_report"; moduleSlug?: Mod
 
 const LS_PREMIUM_PRICE_WARNING = "viora_premium_price_warning";
 const LS_PENDING_PURCHASE = "viora_pending_purchase";
+const LS_REFERRED_BY = "viora_referred_by";
+const LS_PILOT_JOINED = "viora_pilot_joined";
+
+type PilotStatus = {
+  email: string;
+  refCode: string;
+  referredBy?: string;
+  directInvites: number;
+  pilotInvites: number;
+  isPilot: boolean;
+  trialUntil?: number;
+  unlockedAddons: ModuleSlug[];
+  canClaimAddon: boolean;
+  claimedAddon?: ModuleSlug;
+};
 
 const tuningOptions = [
   "Rýchlejšie rozhodovanie",
@@ -221,6 +236,7 @@ function HoverTip({ text, children }: { text: string; children: import("react").
 export default function ProfilePage() {
   const [state, setState] = useState<VioraStateV1 | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [origin, setOrigin] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
 
   const [step, setStep] = useState(0);
@@ -234,6 +250,14 @@ export default function ProfilePage() {
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [isPaying, setIsPaying] = useState(false);
   const [activeHeadline, setActiveHeadline] = useState<(typeof landingHeadlines)[number]>(landingHeadlines[0]);
+
+  const [pilotStatus, setPilotStatus] = useState<PilotStatus | null>(null);
+  const [showPilotModal, setShowPilotModal] = useState(false);
+  const [showFriendsModal, setShowFriendsModal] = useState(false);
+  const [pilotDraftEmail, setPilotDraftEmail] = useState("");
+  const [pilotDraftName, setPilotDraftName] = useState("");
+  const [pilotBusy, setPilotBusy] = useState(false);
+  const [pilotError, setPilotError] = useState<string | null>(null);
 
   const [selectedModule, setSelectedModule] = useState<ModuleSlug | null>(null);
   const [moduleStep, setModuleStep] = useState(0);
@@ -439,6 +463,91 @@ ${url}`;
     window.setTimeout(() => setMicroToast(null), 2200);
   };
 
+  const applyPilot = (data: PilotStatus) => {
+    setPilotStatus(data);
+    setState((prev) => {
+      if (!prev) return prev;
+      const now = Date.now();
+      const trialActive = typeof data.trialUntil === "number" && data.trialUntil > now;
+      const next = patchVioraState(prev, {
+        identity: { ...prev.identity, refCode: data.refCode },
+        unlocks: {
+          ...prev.unlocks,
+          addons: Array.from(new Set([...(prev.unlocks.addons ?? []), ...(data.unlockedAddons ?? [])])),
+          fullTrialUntil: typeof data.trialUntil === "number" ? data.trialUntil : prev.unlocks.fullTrialUntil,
+          full: prev.unlocks.fullPaid === true ? true : trialActive ? true : prev.unlocks.full,
+        },
+      });
+      saveVioraState(next);
+      return next;
+    });
+  };
+
+  const refreshPilot = async (email: string) => {
+    try {
+      const res = await fetch(`/api/pilot/status?email=${encodeURIComponent(email)}`);
+      const json = await res.json();
+      if (json?.ok && json?.data) applyPilot(json.data as PilotStatus);
+    } catch {
+      // ignore
+    }
+  };
+
+  const joinPilotWithEmail = async (email: string, referredBy?: string | null, name?: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return;
+    const joinKey = `${cleanEmail}|${referredBy || ""}`;
+    if (localStorage.getItem(LS_PILOT_JOINED) === joinKey) return refreshPilot(cleanEmail);
+
+    setPilotBusy(true);
+    setPilotError(null);
+    try {
+      const res = await fetch("/api/pilot/join", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, referredBy: referredBy || null }),
+      });
+      const json = await res.json();
+      if (!json?.ok) {
+        setPilotError(json?.error || "Nepodarilo sa prihlásiť do pilotu.");
+        return;
+      }
+      localStorage.setItem(LS_PILOT_JOINED, joinKey);
+      applyPilot(json.data as PilotStatus);
+      patchState({ identity: { ...(state?.identity ?? {}), email: cleanEmail, name: name || state?.identity.name } });
+      setShowPilotModal(false);
+      setShowFriendsModal(true);
+      showToast("VIP Pilot aktivovaný ✅");
+    } catch {
+      setPilotError("Nepodarilo sa prihlásiť do pilotu.");
+    } finally {
+      setPilotBusy(false);
+    }
+  };
+
+  const claimPilotAddon = async (addon: ModuleSlug) => {
+    if (!state?.identity.email) return;
+    try {
+      setPilotBusy(true);
+      const res = await fetch("/api/pilot/claim-addon", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: state.identity.email, addon }),
+      });
+      const json = await res.json();
+      if (json?.ok && json?.data) {
+        applyPilot(json.data as PilotStatus);
+        showToast("Doplnok odomknutý ✅");
+        return;
+      }
+      showToast(json?.error || "Nepodarilo sa odomknúť doplnok.");
+    } catch {
+      showToast("Nepodarilo sa odomknúť doplnok.");
+    } finally {
+      setPilotBusy(false);
+    }
+  };
+
   const getMiniReportTemplate = (slug: ModuleSlug) => {
     if (slug === "vztahy-komunikacia") {
       return {
@@ -473,6 +582,7 @@ ${url}`;
   };
 
   useEffect(() => {
+    setOrigin(window.location.origin);
     const loaded = ensureBaseRunConfig(loadVioraState());
     const withMode = patchVioraState(loaded, { ui: { ...loaded.ui, lastMode: deriveProfileMode(loaded) } });
     saveVioraState(withMode);
@@ -509,7 +619,7 @@ ${url}`;
           if (!prev) return prev;
           if (data?.ok && data?.kind === "full") {
             const next = patchVioraState(prev, {
-              unlocks: { ...prev.unlocks, full: true },
+              unlocks: { ...prev.unlocks, full: true, fullPaid: true },
               ui: { ...prev.ui, lastMode: "premium_steps", premiumStep: 1 },
             });
             saveVioraState(next);
@@ -568,6 +678,39 @@ ${url}`;
     const idx = hashSeedToIndex(deviceSeed, landingHeadlines.length);
     setActiveHeadline(landingHeadlines[idx]);
   }, []);
+
+  useEffect(() => {
+    if (!state) return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) {
+      localStorage.setItem(LS_REFERRED_BY, ref);
+      if (!state.identity.email) {
+        setPilotDraftEmail("");
+        setPilotDraftName(state.identity.name ?? "");
+        setShowPilotModal(true);
+      }
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("ref");
+      window.history.replaceState({}, "", clean.toString());
+    }
+  }, [state]);
+
+  useEffect(() => {
+    if (!state?.identity.email) return;
+    const referredBy = localStorage.getItem(LS_REFERRED_BY);
+    void joinPilotWithEmail(state.identity.email, referredBy, state.identity.name);
+    void refreshPilot(state.identity.email);
+  }, [state?.identity.email]);
+
+  useEffect(() => {
+    if (!state) return;
+    const until = state.unlocks.fullTrialUntil;
+    if (typeof until !== "number") return;
+    if (state.unlocks.fullPaid === true) return;
+    if (Date.now() <= until) return;
+    patchState({ unlocks: { ...state.unlocks, full: false, fullTrialUntil: undefined } });
+  }, [state?.unlocks.fullTrialUntil, state?.unlocks.fullPaid]);
 
 
   useEffect(() => {
@@ -869,10 +1012,23 @@ ${url}`;
     <main className="relative min-h-screen">
       <div className="fixed inset-0 bg-slate-950/55" />
       <div className="relative z-10 mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
-          <p className="text-sm uppercase tracking-[0.16em] text-slate-500">Viora Decision Profile</p>
-          <p className="mt-2 text-sm text-slate-600">{activeHeadline}</p>
-          {state.identity.name && <p className="mt-1 text-sm text-slate-600">Ahoj, {state.identity.name}</p>}
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
+          <div>
+            <p className="text-sm uppercase tracking-[0.16em] text-slate-500">Viora: Personal Analysis</p>
+            <p className="mt-2 text-sm text-slate-600">{activeHeadline}</p>
+            {state.identity.name && <p className="mt-1 text-sm text-slate-600">Ahoj, {state.identity.name}</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => {
+              setPilotDraftEmail(state.identity.email ?? "");
+              setPilotDraftName(state.identity.name ?? "");
+              setPilotError(null);
+              setShowPilotModal(true);
+            }} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50">VIP Pilot</button>
+            {state.identity.email && (
+              <button type="button" onClick={() => setShowFriendsModal(true)} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">Friends</button>
+            )}
+          </div>
         </div>
 
         {shareMessage && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{shareMessage}</div>}
@@ -905,7 +1061,7 @@ ${url}`;
                   </ul>
                 </div>
                 <div className="rounded-xl border border-slate-900 bg-slate-900 p-4 text-slate-100">
-                  <p className="text-sm font-semibold">Premium (5€)</p>
+                  <p className="text-sm font-semibold">Premium (4,99€)</p>
                   <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-200">
                     <li>Viora Deep: kompletná hlboká analýza</li>
                     <li>Viora Plan: 7-dňový checklist zmeny</li>
@@ -1239,6 +1395,134 @@ Spúšťač: ${templ.trigger}` } } });
 
         <div className="mt-8"><Link href="/" title="Vráti ťa na úvod. Výsledky zostanú uložené." className="inline-flex items-center rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700">Späť na úvod</Link></div>
       </div>
+
+      {showPilotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-6">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl md:p-8">
+            <h3 className="text-xl font-semibold">VIP Pilot</h3>
+            <p className="mt-2 text-sm text-slate-600">Zadaj e-mail. Dostaneš osobný link na pozývanie a bonusy sa budú odomykať automaticky.</p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
+                <input type="email" required value={pilotDraftEmail} onChange={(e) => setPilotDraftEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="tvoj@email.sk" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Meno (voliteľné)</label>
+                <input type="text" value={pilotDraftName} onChange={(e) => setPilotDraftName(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Ako ťa môžeme osloviť" />
+              </div>
+              {pilotError && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{pilotError}</div>}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                <p><span className="font-semibold">Pravidlá pilotu:</span> Pozvi 1 → odomkneš 1 doplnok. Pozvi 3 → upgrade (všetky doplnky). Ak 3 tvoji ľudia pozvú 3 → skúšobne celý obsah.</p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowPilotModal(false)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zavrieť</button>
+              <button
+                type="button"
+                disabled={pilotBusy}
+                onClick={() => {
+                  const referredBy = localStorage.getItem(LS_REFERRED_BY);
+                  void joinPilotWithEmail(pilotDraftEmail, referredBy, pilotDraftName);
+                }}
+                className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white"
+              >
+                {pilotBusy ? "Pripájam…" : "Pokračovať"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFriendsModal && state?.identity.email && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-6">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl md:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-semibold">Friends report</h3>
+                <p className="mt-1 text-sm text-slate-600">Koľkých si pozval a čo máš odomknuté.</p>
+              </div>
+              <button type="button" onClick={() => setShowFriendsModal(false)} className="rounded-full border border-slate-300 px-4 py-2 text-sm">Zavrieť</button>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Pozvaní</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-900">{pilotStatus?.directInvites ?? "–"}</p>
+                <p className="mt-1 text-xs text-slate-600">Cieľ: 1 → doplnok, 3 → upgrade</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Pilot pozvaní</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-900">{pilotStatus?.pilotInvites ?? "–"}</p>
+                <p className="mt-1 text-xs text-slate-600">Cieľ: 3 → skúšobne celý obsah</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Trial</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {pilotStatus?.trialUntil && pilotStatus.trialUntil > Date.now() ? "Aktívny" : "–"}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {pilotStatus?.trialUntil ? new Date(pilotStatus.trialUntil).toLocaleString() : ""}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-medium text-slate-800">Tvoj osobný link</p>
+              <div className="mt-2 flex flex-col gap-2 md:flex-row md:items-center">
+                <code className="flex-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                  {pilotStatus?.refCode && origin ? `${origin}/s/${pilotStatus.refCode}` : "Načítavam…"}
+                </code>
+                <button
+                  type="button"
+                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                  onClick={() => {
+                    const link = pilotStatus?.refCode && origin ? `${origin}/s/${pilotStatus.refCode}` : "";
+                    if (!link) return;
+                    void navigator.clipboard.writeText(link);
+                    showToast("Link skopírovaný ✅");
+                  }}
+                >
+                  Kopírovať
+                </button>
+                <button type="button" className="rounded-full border border-slate-300 px-4 py-2 text-sm" onClick={() => void refreshPilot(state.identity.email!)}>Refresh</button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Tip: pošli to do Messengeru/WhatsAppu. Ľudia kliknú a len zadajú email.</p>
+            </div>
+
+            {pilotStatus?.canClaimAddon && (
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Máš nárok na 1 doplnok. Vyber si:</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {modules.filter((m) => !m.isFree).map((m) => {
+                    const already = (state.unlocks.addons ?? []).includes(m.slug);
+                    return (
+                      <button
+                        key={m.slug}
+                        type="button"
+                        disabled={pilotBusy || already}
+                        onClick={() => void claimPilotAddon(m.slug)}
+                        className={`rounded-xl border px-4 py-3 text-left text-sm transition ${already ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white hover:border-slate-400"}`}
+                      >
+                        <p className="font-medium">{m.title}</p>
+                        <p className="mt-1 text-xs text-slate-600">{already ? "Už odomknuté" : "Klikni na odomknutie"}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-900">Tvoje odomknutia</p>
+              <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700">
+                <li>Free profil (vždy)</li>
+                <li>{(state.unlocks.addons ?? []).length ? `Doplnky: ${(state.unlocks.addons ?? []).length}` : "Doplnky: zatiaľ žiadne"}</li>
+                <li>Premium Deep: {state.unlocks.full ? "áno" : "nie"}{state.unlocks.fullPaid ? " (paid)" : state.unlocks.fullTrialUntil && state.unlocks.full ? " (trial)" : ""}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showComingSoon && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-6">

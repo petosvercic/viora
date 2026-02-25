@@ -10,17 +10,17 @@ export const metadata: Metadata = {
     default: "Viora: Personal Analysis",
     template: "%s | Viora: Personal Analysis",
   },
-  description: "Behaviorálny profil a praktické odporúčania z tvojich odpovedí. VIP Pilot odomyká bonusy cez zdieľanie a pozvánky.",
+  description: "Behaviorálny profil a praktické odporúčania z tvojich odpovedí. VIP Pilot: pozvi 1 → doplnok, pozvi 3 → upgrade, 3× pilot → skúšobne celý obsah.",
   openGraph: {
     title: "Viora: Personal Analysis",
-    description: "VIP Pilot: zdieľaj a odomykaj bonusy. Pozvi 5 = všetky dodatky. Pozvi 20 = VIP Pilot.",
+    description: "VIP Pilot: pozvi 1 → doplnok, pozvi 3 → upgrade (všetky doplnky), 3× pilot → skúšobne celý obsah.",
     type: "website",
     images: ["/brand/bg.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "Viora: Personal Analysis",
-    description: "VIP Pilot: zdieľaj a odomykaj bonusy. Pozvi 5 = všetky dodatky. Pozvi 20 = VIP Pilot.",
+    description: "VIP Pilot: pozvi 1 → doplnok, pozvi 3 → upgrade (všetky doplnky), 3× pilot → skúšobne celý obsah.",
     images: ["/brand/bg.png"],
   },
 };

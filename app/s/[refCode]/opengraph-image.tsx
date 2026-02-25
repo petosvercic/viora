@@ -64,7 +64,7 @@ export default function OpenGraphImage() {
           </div>
 
           <div style={{ fontSize: 26, opacity: 0.92, maxWidth: 920 }}>
-            Zdieľaj a odomykaj obsah. Pozvi ľudí a získaš ďalšie balíky (pilotný režim).
+            Pozvi 1 → doplnok. Pozvi 3 → upgrade (všetky doplnky). 3× pilot → skúšobne celý obsah.
           </div>
         </div>
 
@@ -75,9 +75,9 @@ export default function OpenGraphImage() {
           }}
         >
           {[
-            { title: "Zdieľaj", sub: "1 bonus balík" },
-            { title: "Pozvi 5", sub: "všetky dodatky" },
-            { title: "Pozvi 20", sub: "VIP Pilot (premium look)" },
+            { title: "Pozvi 1", sub: "1 doplnok" },
+            { title: "Pozvi 3", sub: "upgrade (všetky doplnky)" },
+            { title: "3× pilot", sub: "trial celý obsah" },
           ].map((card) => (
             <div
               key={card.title}
@@ -95,7 +95,7 @@ export default function OpenGraphImage() {
               <div style={{ fontSize: 28, fontWeight: 800 }}>{card.title}</div>
               <div style={{ fontSize: 20, opacity: 0.9 }}>{card.sub}</div>
               <div style={{ marginTop: 10, fontSize: 16, opacity: 0.78 }}>
-                Aktivácia po registrácii, overení e-mailu a prvej akcii.
+                Stačí, že človek otvorí Viora a zadá e-mail.
               </div>
             </div>
           ))}
