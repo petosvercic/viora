@@ -1012,7 +1012,7 @@ ${url}`;
     <main className="relative min-h-screen">
       <div className="fixed inset-0 bg-slate-950/55" />
       <div className="relative z-10 mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
+        <div className="sticky top-6 z-40 mb-6 flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/75">
           <div>
             <p className="text-sm uppercase tracking-[0.16em] text-slate-500">Viora: Personal Analysis</p>
             <p className="mt-2 text-sm text-slate-600">{activeHeadline}</p>
