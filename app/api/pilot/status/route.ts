@@ -1,4 +1,4 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getEntitlements } from "../../../lib/pilotStore";
@@ -13,4 +13,3 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Status failed" }, { status: 400 });
   }
 }
-

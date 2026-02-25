@@ -34,6 +34,23 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
+
+const ensureStorageConfigured = () => {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) {
+    throw new Error("storage_not_configured");
+  }
+};
+
+const sanitizeReferredBy = (value?: string | null) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "undefined" || trimmed === "null") {
+    return null;
+  }
+  return trimmed;
+};
 const randomCode = () => {
   const alphabet = "abcdefghjkmnpqrstuvwxyz23456789"; // no confusing chars
   let out = "";
@@ -99,6 +116,7 @@ function computeUnlockedAddons(directInvites: number, claimedAddon?: ModuleSlug)
 }
 
 export async function joinPilot(opts: { email: string; referredBy?: string | null }): Promise<PilotEntitlements> {
+  ensureStorageConfigured();
   const email = normalizeEmail(opts.email);
   if (!email || !isEmail(email)) throw new Error("Invalid email");
 
@@ -110,7 +128,7 @@ export async function joinPilot(opts: { email: string; referredBy?: string | nul
   }
 
   // Only set referredBy once.
-  const referredBy = typeof opts.referredBy === "string" ? opts.referredBy.trim() : "";
+  const referredBy = sanitizeReferredBy(opts.referredBy);
   if (referredBy && !user.referredBy) {
     user.referredBy = referredBy;
     // Add this email as a referral to the inviter.
@@ -123,6 +141,7 @@ export async function joinPilot(opts: { email: string; referredBy?: string | nul
 }
 
 export async function claimAddon(opts: { email: string; addon: ModuleSlug }): Promise<PilotEntitlements> {
+  ensureStorageConfigured();
   const email = normalizeEmail(opts.email);
   const addon = opts.addon;
   if (!paidModules.includes(addon)) throw new Error("Invalid addon");
@@ -142,6 +161,7 @@ export async function claimAddon(opts: { email: string; addon: ModuleSlug }): Pr
 }
 
 export async function getEntitlements(emailRaw: string): Promise<PilotEntitlements> {
+  ensureStorageConfigured();
   const email = normalizeEmail(emailRaw);
   const user = await getUser(email);
   if (!user) throw new Error("User not found");
@@ -180,6 +200,7 @@ export async function getEntitlements(emailRaw: string): Promise<PilotEntitlemen
 }
 
 export async function listPilotUsers(): Promise<PilotEntitlements[]> {
+  ensureStorageConfigured();
   const emails = (await kv.smembers(USERS_SET)) as string[];
   if (!Array.isArray(emails) || emails.length === 0) return [];
 
