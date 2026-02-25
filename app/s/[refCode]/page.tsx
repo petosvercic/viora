@@ -54,6 +54,8 @@ export default async function ShareLanding({ params }: PageProps) {
 
   const refUrl = `/s/${safe}`;
   const continueUrl = `/profile?ref=${safe}`;
+  const base = getRequestBaseUrl();
+  const fullContinueUrl = `${base}${continueUrl}`;
 
   return (
     <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
@@ -93,7 +95,7 @@ export default async function ShareLanding({ params }: PageProps) {
         </a>
       </div>
 
-      <ShareActions refUrl={refUrl} />
+      <ShareActions refUrl={refUrl} fullContinueUrl={fullContinueUrl} />
 
       <div style={{ marginTop: 24, opacity: 0.9 }}>
         <ul>
