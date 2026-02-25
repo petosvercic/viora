@@ -8,7 +8,7 @@ type SelectedQuestionIds = Partial<Record<SlotId, string>>;
 
 export type VioraStateV1 = {
   version: 1;
-  identity: { email?: string; name?: string; consent?: boolean };
+  identity: { email?: string; name?: string; consent?: boolean; refCode?: string };
   base: {
     answers?: Record<number, OptionLabel>;
     computedAt?: number;
@@ -16,7 +16,14 @@ export type VioraStateV1 = {
     attempt?: number;
     selectedQuestionIds?: SelectedQuestionIds;
   };
-  unlocks: { full?: boolean; addons?: ModuleSlug[]; included?: ModuleSlug[]; miniReports?: Partial<Record<ModuleSlug, string>> };
+  unlocks: {
+    full?: boolean;
+    fullPaid?: boolean;
+    fullTrialUntil?: number;
+    addons?: ModuleSlug[];
+    included?: ModuleSlug[];
+    miniReports?: Partial<Record<ModuleSlug, string>>;
+  };
   tuning: { done?: boolean; choices?: string[] };
   ui: { lastMode?: ProfileMode; lastSelectedModule?: ModuleSlug; premiumStep?: 1 | 2 | 3 | 4 | 5 };
 };
@@ -110,6 +117,7 @@ export const sanitizeVioraState = (rawValue: Partial<VioraStateV1> | null | unde
       email,
       name: typeof raw.identity?.name === "string" ? raw.identity.name : undefined,
       consent: raw.identity?.consent === true,
+      refCode: typeof raw.identity?.refCode === "string" ? raw.identity.refCode : undefined,
     },
     base: {
       answers: normalizeAnswers(raw.base?.answers),
@@ -120,6 +128,8 @@ export const sanitizeVioraState = (rawValue: Partial<VioraStateV1> | null | unde
     },
     unlocks: {
       full: raw.unlocks?.full === true,
+      fullPaid: raw.unlocks?.fullPaid === true,
+      fullTrialUntil: typeof raw.unlocks?.fullTrialUntil === "number" ? raw.unlocks.fullTrialUntil : undefined,
       addons: normMods(raw.unlocks?.addons),
       included: normMods(raw.unlocks?.included, 2),
       miniReports: normMiniReports(raw.unlocks?.miniReports),

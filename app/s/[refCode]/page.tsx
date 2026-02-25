@@ -13,7 +13,7 @@ type PageProps = {
   params: { refCode: string };
 };
 
-const OG_DESCRIPTION = "Zdieľaj → bonus balík. Pozvi 5 → všetky dodatky. Pozvi 20 → VIP Pilot (premium look počas pilotu).";
+const OG_DESCRIPTION = "Pozvi 1 → odomkneš 1 doplnok. Pozvi 3 → upgrade (všetky doplnky). 3 tvoji ľudia dosiahnu Pilot (pozvú 3) → skúšobne celý obsah.";
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const base = getRequestBaseUrl();
@@ -75,23 +75,23 @@ export default function ShareLanding({ params }: PageProps) {
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-900">1) Zdieľaj</p>
-            <p className="mt-1 text-sm text-slate-600">Odomkneš 1 bonus balík (po validácii).</p>
+            <p className="mt-1 text-sm text-slate-600">Tvoj link prinesie prvého človeka → 1 doplnok.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-900">2) Pozvi 5</p>
-            <p className="mt-1 text-sm text-slate-600">Odomkneš všetky dodatky.</p>
+            <p className="text-sm font-semibold text-slate-900">2) Pozvi 3</p>
+            <p className="mt-1 text-sm text-slate-600">Upgrade: všetky doplnky.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-900">3) Pozvi 20</p>
-            <p className="mt-1 text-sm text-slate-600">Aktivuješ VIP Pilot (premium look).</p>
+            <p className="text-sm font-semibold text-slate-900">3) 3× Pilot</p>
+            <p className="mt-1 text-sm text-slate-600">Ak 3 tvoji ľudia pozvú 3 → skúšobne celý obsah.</p>
           </div>
         </div>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-sm text-slate-700">
-            <span className="font-semibold">Validácia:</span> odmeny sa aktivujú až keď pozvaný človek dokončí registráciu, overí e-mail a spraví prvú akciu.
+            <span className="font-semibold">Pilot pravidlo:</span> stačí, že pozvaný človek otvorí Viora a zadá e-mail. (Žiadne citlivé dáta v poste.)
           </p>
-          <p className="mt-2 text-xs text-slate-500">Bez citlivých dát v poste. Zdieľaš len link. 👌</p>
+          <p className="mt-2 text-xs text-slate-500">Je to test šírenia. Odmeny sa môžu počas pilotu meniť. 👌</p>
         </div>
 
         <div className="mt-7 flex flex-wrap items-center gap-3">
