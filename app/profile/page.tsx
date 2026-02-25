@@ -419,12 +419,12 @@ export default function ProfilePage() {
 
   const shareWithLink = async (text: string, shareTitle?: string) => {
     const ref = getShareRefId();
-    const url = `${window.location.origin}/profile?ref=${ref}`;
+    const url = `${window.location.origin}/s/${ref}`;
     const payload = `${text}
 ${url}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: shareTitle ?? "Viora profil", text, url });
+        await navigator.share({ title: shareTitle ?? "Viora: Personal Analysis", text, url });
       } else {
         await copyText(payload);
       }
