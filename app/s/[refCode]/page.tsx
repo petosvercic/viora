@@ -4,21 +4,32 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { getRequestBaseUrl } from "../../lib/siteUrl";
+import RefCapture from "./ref-capture";
 import ShareActions from "./share-actions";
 
 export const dynamic = "force-dynamic";
 
-
 type PageProps = {
-  params: { refCode: string };
+  params: Promise<{ refCode: string }>;
 };
 
 const OG_DESCRIPTION = "Pozvi 1 → odomkneš 1 doplnok. Pozvi 3 → upgrade (všetky doplnky). 3 tvoji ľudia dosiahnu Pilot (pozvú 3) → skúšobne celý obsah.";
 
+const sanitizeRefCode = (refCode: string) => {
+  const trimmed = refCode.trim();
+  if (!trimmed || trimmed === "undefined" || trimmed === "null") {
+    return "";
+  }
+  return trimmed;
+};
+
+const toSafeRef = (refCode: string) => encodeURIComponent(sanitizeRefCode(refCode));
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { refCode } = await params;
   const base = getRequestBaseUrl();
-  const safe = encodeURIComponent(params.refCode);
-  const url = `${base}/s/${safe}`;
+  const safeRef = toSafeRef(refCode);
+  const url = `${base}/s/${safeRef}`;
   const image = `${url}/opengraph-image`;
 
   return {
@@ -47,13 +58,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default function ShareLanding({ params }: PageProps) {
-  const safe = encodeURIComponent(params.refCode);
-  const refUrl = `/s/${safe}`;
-  const continueUrl = `/profile?ref=${safe}`;
+export default async function ShareLanding({ params }: PageProps) {
+  const { refCode } = await params;
+  const safeRef = toSafeRef(refCode);
+  const refUrl = `/s/${safeRef}`;
+  const continueUrl = `/profile?ref=${safeRef}`;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-10">
+      <RefCapture refCode={refCode} />
       <header className="flex items-center justify-between gap-4">
         <Link href="/" className="inline-flex items-center gap-3" aria-label="Viora domov">
           <Image src="/brand/logo.png" alt="Viora" width={120} height={36} priority className="h-9 w-auto" />

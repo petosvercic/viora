@@ -21,6 +21,15 @@ const LS_PENDING_PURCHASE = "viora_pending_purchase";
 const LS_REFERRED_BY = "viora_referred_by";
 const LS_PILOT_JOINED = "viora_pilot_joined";
 
+const sanitizeReferredBy = (value?: string | null) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "undefined" || trimmed === "null") {
+    return null;
+  }
+  return trimmed;
+};
+
 type PilotStatus = {
   email: string;
   refCode: string;
@@ -485,7 +494,7 @@ ${url}`;
 
   const refreshPilot = async (email: string) => {
     try {
-      const res = await fetch(`/api/pilot/status?email=${encodeURIComponent(email)}`);
+      const res = await fetch(`/api/pilot/status?email=${encodeURIComponent(email)}`, { cache: "no-store" });
       const json = await res.json();
       if (json?.ok && json?.data) applyPilot(json.data as PilotStatus);
     } catch {
@@ -496,7 +505,8 @@ ${url}`;
   const joinPilotWithEmail = async (email: string, referredBy?: string | null, name?: string) => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) return;
-    const joinKey = `${cleanEmail}|${referredBy || ""}`;
+    const sanitizedReferredBy = sanitizeReferredBy(referredBy);
+    const joinKey = `${cleanEmail}|${sanitizedReferredBy || ""}`;
     if (localStorage.getItem(LS_PILOT_JOINED) === joinKey) return refreshPilot(cleanEmail);
 
     setPilotBusy(true);
@@ -505,7 +515,7 @@ ${url}`;
       const res = await fetch("/api/pilot/join", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, referredBy: referredBy || null }),
+        body: JSON.stringify({ email: cleanEmail, name: name || null, referredBy: sanitizedReferredBy }),
       });
       const json = await res.json();
       if (!json?.ok) {
@@ -682,7 +692,7 @@ ${url}`;
   useEffect(() => {
     if (!state) return;
     const params = new URLSearchParams(window.location.search);
-    const ref = params.get("ref");
+    const ref = sanitizeReferredBy(params.get("ref"));
     if (ref) {
       localStorage.setItem(LS_REFERRED_BY, ref);
       if (!state.identity.email) {
@@ -698,7 +708,7 @@ ${url}`;
 
   useEffect(() => {
     if (!state?.identity.email) return;
-    const referredBy = localStorage.getItem(LS_REFERRED_BY);
+    const referredBy = sanitizeReferredBy(localStorage.getItem(LS_REFERRED_BY));
     void joinPilotWithEmail(state.identity.email, referredBy, state.identity.name);
     void refreshPilot(state.identity.email);
   }, [state?.identity.email]);
@@ -1421,7 +1431,7 @@ Spúšťač: ${templ.trigger}` } } });
                 type="button"
                 disabled={pilotBusy}
                 onClick={() => {
-                  const referredBy = localStorage.getItem(LS_REFERRED_BY);
+                  const referredBy = sanitizeReferredBy(localStorage.getItem(LS_REFERRED_BY));
                   void joinPilotWithEmail(pilotDraftEmail, referredBy, pilotDraftName);
                 }}
                 className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white"
