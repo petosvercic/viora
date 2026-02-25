@@ -1,27 +1,20 @@
-import 'server-only';
-
-import { headers } from "next/headers";
-
-export function getEnvBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.SITE_URL;
-  if (explicit) return explicit.startsWith("http") ? explicit : `https://${explicit}`;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
+﻿/**
+ * Absolute site origin (no trailing slash).
+ * Compatible with Next.js where headers() is async by avoiding next/headers.
+ */
+function normalizeOrigin(input: string): string {
+  let s = (input ?? "").trim();
+  if (!s) return s;
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  return s.replace(/\/+$/, "");
 }
 
-export function getRequestBaseUrl(): string {
-  // Prefer explicit env when provided.
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.SITE_URL;
-  if (explicit) return explicit.startsWith("http") ? explicit : `https://${explicit}`;
+export function siteUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.SITE_URL;
+  if (explicit) return normalizeOrigin(explicit);
 
-  // Vercel injects VERCEL_URL without protocol.
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-
-  // Fallback to request headers (useful on non-Vercel deployments).
-  const h = headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  if (host) return `${proto}://${host}`;
+  const vercel = process.env.VERCEL_URL; // Vercel sets this for prod + previews
+  if (vercel) return normalizeOrigin(vercel);
 
   return "http://localhost:3000";
 }
